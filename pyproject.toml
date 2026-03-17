@@ -1,0 +1,66 @@
+[project]
+name = "interview-app"
+version = "0.1.0"
+description = "Interview practice app built with Streamlit and OpenAI."
+authors = [
+  { name = "Sofien Fejji", email = "sofien.fejji93@hotmail.com" },
+]
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = "\\.pyi?$"
+exclude = """
+(
+  /\\.git
+  | /\\.venv
+  | /build
+  | /dist
+)
+"""
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+  ".venv",
+  "build",
+  "dist",
+]
+select = [
+  "E",
+  "F",
+  "W",
+  "I",
+]
+ignore = [
+  "E203",
+  "E501",
+]
+
+[tool.ruff.isort]
+known-first-party = ["interview_app"]
+combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.11"
+plugins = []
+ignore_missing_imports = true
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = [
+  "tests",
+]
