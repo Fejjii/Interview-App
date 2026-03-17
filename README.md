@@ -2,6 +2,8 @@
 
 Practice interviews by generating questions and evaluating answers with an LLM, wrapped in a small Streamlit UI.
 
+See [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) for architecture, development story, and file reference.
+
 ## Reviewer notes (Sprint 1 rubric)
 
 - **Model**: choose from `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini` in the sidebar.
