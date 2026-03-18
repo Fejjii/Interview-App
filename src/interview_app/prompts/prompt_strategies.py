@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""
+Prompt-building functions ("prompt strategies").
+
+This module is deliberately *pure* (no Streamlit, no OpenAI calls):
+- Inputs: interview type, role, seniority, job description, number of questions…
+- Output: a pair of strings: `system_prompt` + `user_prompt`
+
+The service layer selects one of these strategies and passes the result to `LLMClient`.
+"""
+
 from dataclasses import dataclass
 
 from interview_app.prompts.prompt_templates import load_template_text
@@ -7,6 +17,8 @@ from interview_app.prompts.prompt_templates import load_template_text
 
 @dataclass(frozen=True)
 class PromptBuildResult:
+    """A fully-built prompt ready to send to `LLMClient`."""
+
     system_prompt: str
     user_prompt: str
     template_name: str
@@ -20,6 +32,7 @@ def build_zero_shot_prompt(
     job_description: str = "",
     n_questions: int = 5,
 ) -> PromptBuildResult:
+    """Build a direct, instruction-only (zero-shot) prompt."""
     template = load_template_text("zero_shot")
     user_prompt = _format_template(
         template,
@@ -41,6 +54,7 @@ def build_few_shot_prompt(
     job_description: str = "",
     n_questions: int = 5,
 ) -> PromptBuildResult:
+    """Build a prompt that includes examples (few-shot) to steer format/quality."""
     template = load_template_text("few_shot")
     user_prompt = _format_template(
         template,
@@ -62,6 +76,11 @@ def build_chain_of_thought_prompt(
     job_description: str = "",
     n_questions: int = 5,
 ) -> PromptBuildResult:
+    """
+    Build a prompt that encourages step-by-step reasoning.
+
+    Note: The system prompt explicitly instructs the model not to reveal hidden reasoning.
+    """
     template = load_template_text("chain_of_thought")
     user_prompt = _format_template(
         template,
@@ -83,6 +102,7 @@ def build_structured_output_prompt(
     job_description: str = "",
     n_questions: int = 5,
 ) -> PromptBuildResult:
+    """Build a prompt that asks for machine-readable output (JSON)."""
     template = load_template_text("structured_output")
     user_prompt = _format_template(
         template,
@@ -107,6 +127,7 @@ def build_role_based_prompt(
     job_description: str = "",
     n_questions: int = 5,
 ) -> PromptBuildResult:
+    """Build a prompt that sets a strong interviewer persona (role-based prompting)."""
     template = load_template_text("role_based")
     # This template includes "System role:" content; we still keep an outer system prompt
     # for consistent safety / formatting behavior.
@@ -157,6 +178,7 @@ def _system_prompt_for(strategy: str) -> str:
 
 
 def _normalize_block(text: str) -> str:
+    """Normalize optional multi-line blocks so templates can assume a value exists."""
     t = (text or "").strip()
     return t if t else "(none)"
 

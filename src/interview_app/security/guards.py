@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+"""
+Security guardrails for user-provided text.
+
+In an LLM app, user text is part of the model input. This module adds a simple
+"defense-in-depth" layer before we call OpenAI:
+- validate: required / non-empty / length limits
+- sanitize: redact obvious secrets so they aren't sent to a third-party API
+- detect: naive prompt-injection patterns; block requests when suspected
+
+The guardrails are intentionally lightweight for a learning project; treat them as
+an extension point (you can harden them as you iterate).
+"""
+
 import re
 from typing import Final
 
@@ -7,6 +20,8 @@ from pydantic import BaseModel, Field
 
 
 class GuardrailResult(BaseModel):
+    """Structured guardrail output, designed for UI display and debugging."""
+
     ok: bool
     cleaned_text: str = Field(default="")
     reason: str | None = None
@@ -131,6 +146,7 @@ def run_guardrails(text: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> Guardra
     try:
         cleaned = validate_user_input(text, max_chars=max_chars)
     except ValueError as e:
+        # Return a non-exceptional result so the UI can render a friendly message.
         return GuardrailResult(
             ok=False,
             cleaned_text="",

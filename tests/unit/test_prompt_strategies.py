@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""
+Unit tests for prompt strategies (`interview_app.prompts.prompt_strategies`).
+
+Goal:
+- verify each strategy returns non-empty system + user prompts
+- sanity-check that the structured-output strategy actually asks for JSON
+"""
+
 from interview_app.prompts.prompt_strategies import (
     build_chain_of_thought_prompt,
     build_few_shot_prompt,
@@ -10,6 +18,7 @@ from interview_app.prompts.prompt_strategies import (
 
 
 def test_prompt_strategies_return_non_empty_prompts() -> None:
+    """All strategies should return usable prompt strings."""
     common = {
         "interview_type": "Behavioral",
         "role_title": "Software Engineer",
@@ -33,6 +42,7 @@ def test_prompt_strategies_return_non_empty_prompts() -> None:
 
 
 def test_structured_output_template_mentions_json() -> None:
+    """Structured output strategy should request JSON (for easier parsing)."""
     res = build_structured_output_prompt(
         interview_type="System design",
         role_title="Backend Engineer",

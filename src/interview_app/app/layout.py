@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+"""
+Streamlit page layout and button wiring.
+
+This module renders the main page body (tabs + forms) and is responsible for calling
+service-layer functions when the user clicks buttons.
+
+Design note:
+- UI code lives here (Streamlit widgets, spinners, error display)
+- Domain logic lives in `interview_app.services.*` (guardrails + prompt building + LLM calls)
+"""
+
 import streamlit as st
 
 from interview_app.app.controls import UISettings
@@ -20,11 +31,13 @@ from interview_app.ui.widgets import (
 
 
 def render_header() -> None:
+    """Render the app title/header at the top of the page."""
     st.title("Interview Practice App")
     st.caption("Generate practice questions and get answer feedback with OpenAI models.")
 
 
 def render_instructions() -> None:
+    """Beginner-friendly usage instructions (collapsed by default)."""
     with st.expander("How to use", expanded=False):
         st.markdown(
             """
@@ -36,6 +49,14 @@ def render_instructions() -> None:
 
 
 def render_tabs(settings: UISettings) -> None:
+    """
+    Render the main UI tabs and wire actions to services.
+
+    Tabs:
+    - Question generation → `services.interview_generator.generate_questions`
+    - Answer feedback → `services.answer_evaluator.evaluate_answer`
+    - Mock interview → placeholder for a future multi-turn flow (session state)
+    """
     tab_generate, tab_feedback, tab_mock = st.tabs(["Question generation", "Answer feedback", "Mock interview"])
 
     with tab_generate:
@@ -46,7 +67,7 @@ def render_tabs(settings: UISettings) -> None:
         if st.button("Generate questions", type="primary", use_container_width=True):
             try:
                 with st.spinner("Generating questions..."):
-                    result = generate_questions(
+                    gen_result = generate_questions(
                         interview_type=settings.interview_type,
                         role_title=settings.role_title,
                         seniority=settings.seniority,
@@ -58,17 +79,18 @@ def render_tabs(settings: UISettings) -> None:
                         max_tokens=settings.max_tokens,
                     )
             except Exception as e:
+                # Catch-all so UI doesn't crash; the exception is still shown for debugging.
                 show_error(title="Generation failed", body=f"Error: `{type(e).__name__}`\n\n{e}")
             else:
-                show_guardrail_summary(guardrails=result.guardrails)
-                if not result.ok or result.response is None:
-                    show_error(title="Request blocked", body=result.error or "Unknown error.")
+                show_guardrail_summary(guardrails=gen_result.guardrails)
+                if not gen_result.ok or gen_result.response is None:
+                    show_error(title="Request blocked", body=gen_result.error or "Unknown error.")
                 else:
-                    show_llm_response(title="Generated questions", response=result.response)
-                    if settings.show_debug and result.prompt is not None:
+                    show_llm_response(title="Generated questions", response=gen_result.response)
+                    if settings.show_debug and gen_result.prompt is not None:
                         show_prompt_debug(
-                            system_prompt=result.prompt.system_prompt,
-                            user_prompt=result.prompt.user_prompt,
+                            system_prompt=gen_result.prompt.system_prompt,
+                            user_prompt=gen_result.prompt.user_prompt,
                         )
 
         if settings.show_debug:
@@ -82,7 +104,7 @@ def render_tabs(settings: UISettings) -> None:
         if st.button("Evaluate answer", type="primary", use_container_width=True):
             try:
                 with st.spinner("Evaluating answer..."):
-                    result = evaluate_answer(
+                    eval_result = evaluate_answer(
                         interview_type=settings.interview_type,
                         role_title=settings.role_title,
                         seniority=settings.seniority,
@@ -95,13 +117,13 @@ def render_tabs(settings: UISettings) -> None:
             except Exception as e:
                 show_error(title="Evaluation failed", body=f"Error: `{type(e).__name__}`\n\n{e}")
             else:
-                show_guardrail_summary(guardrails=result.guardrails)
-                if not result.ok or result.response is None:
-                    show_error(title="Request blocked", body=result.error or "Unknown error.")
+                show_guardrail_summary(guardrails=eval_result.guardrails)
+                if not eval_result.ok or eval_result.response is None:
+                    show_error(title="Request blocked", body=eval_result.error or "Unknown error.")
                 else:
-                    show_llm_response(title="Evaluation", response=result.response)
-                    if settings.show_debug and result.system_prompt and result.user_prompt:
-                        show_prompt_debug(system_prompt=result.system_prompt, user_prompt=result.user_prompt)
+                    show_llm_response(title="Evaluation", response=eval_result.response)
+                    if settings.show_debug and eval_result.system_prompt and eval_result.user_prompt:
+                        show_prompt_debug(system_prompt=eval_result.system_prompt, user_prompt=eval_result.user_prompt)
 
         if settings.show_debug:
             show_settings_debug(

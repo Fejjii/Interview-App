@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""
+Service: evaluate a candidate answer.
+
+This module powers the "Answer feedback" tab. It performs the same high-level steps
+as question generation:
+- validate/sanitize inputs (guardrails)
+- build prompts (here it's a fixed evaluator prompt, not a strategy template)
+- call the OpenAI model once and return a structured response for the UI
+"""
+
 from dataclasses import dataclass
 
 from interview_app.llm.openai_client import LLMClient
@@ -9,6 +19,8 @@ from interview_app.utils.types import LLMResponse
 
 @dataclass(frozen=True)
 class EvaluateAnswerResult:
+    """Return type for `evaluate_answer` (easy to consume from Streamlit)."""
+
     ok: bool
     response: LLMResponse | None
     error: str | None
@@ -35,6 +47,7 @@ def evaluate_answer(
     Sprint-1 project scope.
     """
 
+    # Guardrails: reject empty / overlong / suspicious inputs before calling the model.
     guards: dict[str, GuardrailResult] = {
         "question": run_guardrails(question or "", max_chars=4000),
         "answer": run_guardrails(answer or "", max_chars=8000),

@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""
+Pytest configuration for this repository.
+
+This project uses a `src/` layout but is not installed as a package when running tests.
+We add `src/` to `sys.path` so `import interview_app...` works in all environments.
+"""
+
 import sys
 from pathlib import Path
 

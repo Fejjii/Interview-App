@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+"""
+Centralized configuration (settings) for the app.
+
+This project uses environment variables as the primary configuration mechanism.
+For local development, a `.env` file in the project root is supported.
+
+Typical flow:
+- `streamlit_app.py` loads `.env` so env vars are available
+- `LLMClient` calls `get_settings()` to read OPENAI_API_KEY, defaults, etc.
+"""
+
 from functools import lru_cache
 
 from pydantic import Field, SecretStr
@@ -36,5 +47,11 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """
+    Load and cache settings (singleton-style).
+
+    Streamlit re-runs the script frequently; caching avoids repeated env parsing and
+    keeps config access fast and consistent during a session.
+    """
     return Settings()
 

@@ -1,17 +1,31 @@
 from __future__ import annotations
 
+"""
+OpenAI API wrapper (LLM client).
+
+The rest of the app should not need to know about:
+- how to initialize the OpenAI SDK
+- how to assemble `{role, content}` messages
+- how to parse responses and usage metadata
+
+This module provides a small `LLMClient` surface:
+`generate_response(system_prompt=..., user_prompt=..., ...) -> LLMResponse`
+"""
+
 from dataclasses import dataclass
 from typing import Any
 
 from openai import OpenAI
 
 from interview_app.config.settings import Settings, get_settings
-from interview_app.llm.model_settings import MODEL_PRESETS, ModelConfig
+from interview_app.llm.model_settings import MODEL_PRESETS, ModelConfig, is_model_preset_key
 from interview_app.utils.types import LLMResponse, LLMUsage
 
 
 @dataclass(frozen=True)
 class ClientParams:
+    """Resolved parameters for a single OpenAI request (after defaults are applied)."""
+
     model: str
     temperature: float
     top_p: float | None
@@ -37,6 +51,14 @@ class LLMClient:
         max_tokens: int | None = None,
         timeout_s: float | None = 60.0,
     ) -> None:
+        """
+        Create an OpenAI client with reasonable defaults.
+
+        Resolution order:
+        - explicit constructor args (model/temperature/…)
+        - matching preset defaults (if `Settings.openai_model` is a preset key)
+        - fallback to raw `Settings` values
+        """
         self._settings = settings or get_settings()
 
         resolved_key = api_key or (
@@ -44,13 +66,6 @@ class LLMClient:
             if self._settings.openai_api_key is not None
             else None
         )
-        # #region agent log
-        import json
-        from pathlib import Path
-        _log = Path(__file__).resolve().parents[4] / "debug-0cdc00.log"
-        with open(_log, "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({"hypothesisId": "B", "location": "openai_client.py:LLMClient.__init__", "message": "key_resolution", "data": {"settings_key_is_none": self._settings.openai_api_key is None, "resolved_key_set": bool(resolved_key and str(resolved_key).strip())}, "timestamp": __import__("time").time() * 1000}) + "\n")
-        # #endregion
         if not (resolved_key and str(resolved_key).strip()):
             raise ValueError(
                 "OpenAI API key is missing. Set OPENAI_API_KEY in a .env file (copy .env.example to .env) "
@@ -59,7 +74,9 @@ class LLMClient:
         self._client = OpenAI(api_key=resolved_key.strip())
         self._timeout_s = timeout_s
 
-        preset: ModelConfig | None = MODEL_PRESETS.get(self._settings.openai_model)  # type: ignore[arg-type]
+        # If the configured model is one of our presets, use its defaults for temperature/max_tokens.
+        preset_key = self._settings.openai_model
+        preset: ModelConfig | None = MODEL_PRESETS.get(preset_key) if is_model_preset_key(preset_key) else None
         self._defaults = ClientParams(
             model=model or (preset.name if preset else self._settings.openai_model),
             temperature=temperature if temperature is not None else (preset.default_temperature if preset else self._settings.openai_temperature),
@@ -97,8 +114,10 @@ class LLMClient:
             {"role": "user", "content": user_prompt},
         ]
         if extra_messages:
+            # Insert extra messages between system and the final user prompt.
             messages = messages[:-1] + extra_messages + messages[-1:]
 
+        # Single-shot Chat Completions call (kept intentionally simple for this project).
         resp = self._client.chat.completions.create(
             model=resolved.model,
             messages=messages,

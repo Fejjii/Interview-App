@@ -48,6 +48,7 @@ combine-as-imports = true
 python_version = "3.11"
 plugins = []
 ignore_missing_imports = true
+follow_imports = "skip"
 strict_optional = true
 warn_unused_ignores = true
 warn_redundant_casts = true

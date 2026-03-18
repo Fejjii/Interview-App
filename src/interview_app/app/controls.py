@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+"""
+Streamlit sidebar controls and UI settings model.
+
+The goal of this module is to:
+- keep Streamlit widget code out of the service layer
+- centralize "what knobs exist" (prompt strategy, model preset, temperature, etc.)
+- return a single `UISettings` object that other UI code can pass around
+"""
+
 from dataclasses import dataclass
 
 import streamlit as st
@@ -10,6 +19,8 @@ from interview_app.prompts.prompt_templates import load_template
 
 @dataclass(frozen=True)
 class UISettings:
+    """All UI-controlled settings that affect prompt building and LLM calls."""
+
     interview_type: str
     role_title: str
     seniority: str
@@ -21,6 +32,12 @@ class UISettings:
 
 
 def render_sidebar_controls() -> UISettings:
+    """
+    Render sidebar widgets and return a frozen `UISettings` snapshot.
+
+    Streamlit re-runs the script top-to-bottom on every interaction; returning a single
+    object keeps downstream code simple and makes the app's "state" explicit.
+    """
     st.sidebar.header("Settings")
 
     interview_type = st.sidebar.selectbox(
@@ -45,6 +62,7 @@ def render_sidebar_controls() -> UISettings:
         help="Choose one of 5 prompting techniques to compare outputs.",
     )
     try:
+        # Pull a short description from the template header to make the UI self-explanatory.
         tmpl = load_template(prompt_strategy)
         if tmpl.description:
             st.sidebar.caption(f"**{prompt_strategy}**: {tmpl.description}")
@@ -58,6 +76,7 @@ def render_sidebar_controls() -> UISettings:
         options=preset_keys,
         index=preset_keys.index("gpt-4o-mini") if "gpt-4o-mini" in preset_keys else 0,
     )
+    # Each preset provides reasonable defaults; users can override via sliders below.
     preset = MODEL_PRESETS[model_preset]
 
     temperature = st.sidebar.slider(

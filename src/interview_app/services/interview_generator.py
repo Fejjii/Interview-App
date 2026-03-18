@@ -1,6 +1,21 @@
 from __future__ import annotations
 
+"""
+Service: generate interview questions.
+
+This module is the "domain layer" for the Question generation tab.
+It translates UI inputs into:
+- validated/sanitized text (guardrails)
+- a chosen prompt strategy (prompt-building)
+- a single OpenAI call (LLM client)
+
+The Streamlit UI calls `generate_questions(...)` directly and then renders either:
+- a blocked request (guardrail failure), or
+- an `LLMResponse` with optional prompt debug output.
+"""
+
 from dataclasses import dataclass
+from typing import Callable
 
 from interview_app.llm.openai_client import LLMClient
 from interview_app.prompts import prompt_strategies
@@ -11,6 +26,8 @@ from interview_app.utils.types import LLMResponse
 
 @dataclass(frozen=True)
 class GenerateQuestionsResult:
+    """Return type for `generate_questions` (easy to consume from Streamlit)."""
+
     ok: bool
     response: LLMResponse | None
     error: str | None
@@ -35,6 +52,9 @@ def generate_questions(
 
     This is the main "happy path" service used by the Streamlit UI.
     """
+
+    # Guardrails run first so we never send unsafe or malformed content to the model.
+    # Each input gets an independent result so the UI can show a clear summary.
 
     guards: dict[str, GuardrailResult] = {
         "job_description": run_guardrails(job_description or "", max_chars=8000),
@@ -66,6 +86,7 @@ def generate_questions(
         n_questions=n_questions,
     )
 
+    # Add a defensive instruction that the model must not reveal system/developer prompts.
     system_prompt = protect_system_prompt(prompt.system_prompt)
     client = LLMClient(model=model, temperature=temperature, max_tokens=max_tokens)
     resp = client.generate_response(system_prompt=system_prompt, user_prompt=prompt.user_prompt)
@@ -92,7 +113,12 @@ def _build_prompt(
     job_description: str,
     n_questions: int,
 ) -> PromptBuildResult:
-    builders: dict[str, object] = {
+    """
+    Dispatch to the correct prompt-builder function by strategy name.
+
+    Keeping this mapping here makes it explicit which strategies are supported by the UI.
+    """
+    builders: dict[str, Callable[..., PromptBuildResult]] = {
         "zero_shot": prompt_strategies.build_zero_shot_prompt,
         "few_shot": prompt_strategies.build_few_shot_prompt,
         "chain_of_thought": prompt_strategies.build_chain_of_thought_prompt,
@@ -103,7 +129,7 @@ def _build_prompt(
     if builder is None:
         raise ValueError(f"Unknown prompt strategy: {prompt_strategy!r}")
 
-    return builder(  # type: ignore[misc]
+    return builder(
         interview_type=interview_type,
         role_title=role_title,
         seniority=seniority,
