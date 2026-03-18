@@ -9,3 +9,7 @@ dist/
 # secrets
 .env
 
+# debug session logs
+debug-*.log
+**/debug-*.log
+

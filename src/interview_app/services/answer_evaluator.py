@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from interview_app.llm.openai_client import LLMClient
 from interview_app.security.guards import GuardrailResult, protect_system_prompt, run_guardrails
+from interview_app.utils.language import language_instruction
 from interview_app.utils.types import LLMResponse
 
 
@@ -39,6 +40,7 @@ def evaluate_answer(
     model: str,
     temperature: float,
     max_tokens: int,
+    response_language: str = "en",
 ) -> EvaluateAnswerResult:
     """
     Evaluate a user's answer to an interview question.
@@ -71,7 +73,9 @@ def evaluate_answer(
             user_prompt=None,
         )
 
-    system_prompt = protect_system_prompt(_evaluator_system_prompt())
+    system_prompt = protect_system_prompt(
+        _evaluator_system_prompt(response_language=response_language)
+    )
     user_prompt = _evaluator_user_prompt(
         interview_type=interview_type,
         role_title=role_title,
@@ -93,8 +97,8 @@ def evaluate_answer(
     )
 
 
-def _evaluator_system_prompt() -> str:
-    return (
+def _evaluator_system_prompt(*, response_language: str = "en") -> str:
+    base = (
         "You are an expert interview coach. Evaluate the candidate's answer with a focus on clarity, "
         "correctness, structure, and trade-offs. Be specific and actionable."
         "\n\n"
@@ -105,6 +109,7 @@ def _evaluator_system_prompt() -> str:
         "- Improved answer (concise)\n"
         "- Follow-up questions (3)\n"
     )
+    return f"{base}\n\n{language_instruction(response_language)}"
 
 
 def _evaluator_user_prompt(

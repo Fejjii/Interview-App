@@ -15,6 +15,12 @@ import streamlit as st
 
 from interview_app.llm import MODEL_PRESETS
 from interview_app.prompts.prompt_templates import load_template
+from interview_app.utils.language import (
+    DEFAULT_LANGUAGE,
+    SUPPORTED_LANGUAGES,
+    get_language_name,
+    langdetect_available,
+)
 
 
 @dataclass(frozen=True)
@@ -29,6 +35,7 @@ class UISettings:
     temperature: float
     max_tokens: int
     show_debug: bool
+    response_language: str
 
 
 def render_sidebar_controls() -> UISettings:
@@ -39,6 +46,35 @@ def render_sidebar_controls() -> UISettings:
     object keeps downstream code simple and makes the app's "state" explicit.
     """
     st.sidebar.header("Settings")
+
+    # Response language: Auto (detect from input) or fixed choice. Stored in session state.
+    lang_options = ["Auto (detect)"] + [f"{name} ({code})" for code, name in SUPPORTED_LANGUAGES.items()]
+    current = st.session_state.get("response_language")
+    if current:
+        try:
+            idx = list(SUPPORTED_LANGUAGES.keys()).index(current) + 1
+        except ValueError:
+            idx = 0
+    else:
+        idx = 0
+    lang_choice = st.sidebar.selectbox(
+        "Response language",
+        options=lang_options,
+        index=idx,
+        help="Auto detects from job description or first input; override to fix the output language.",
+    )
+    if lang_choice == "Auto (detect)":
+        st.session_state.response_language = None
+    else:
+        code = lang_choice.split("(")[-1].rstrip(")")
+        st.session_state.response_language = code if code in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+    if current:
+        st.sidebar.caption(f"Using: {get_language_name(current)}")
+    if lang_choice == "Auto (detect)" and not langdetect_available():
+        st.sidebar.warning(
+            "Auto-detect requires the **langdetect** package. Install with: `pip install langdetect`. "
+            "Using English until then, or pick a language above."
+        )
 
     interview_type = st.sidebar.selectbox(
         "Interview type",
@@ -97,6 +133,8 @@ def render_sidebar_controls() -> UISettings:
     st.sidebar.divider()
     show_debug = st.sidebar.toggle("Show debug", value=False)
 
+    response_language = st.session_state.get("response_language") or DEFAULT_LANGUAGE
+
     return UISettings(
         interview_type=interview_type,
         role_title=role_title,
@@ -106,5 +144,6 @@ def render_sidebar_controls() -> UISettings:
         temperature=temperature,
         max_tokens=max_tokens,
         show_debug=show_debug,
+        response_language=response_language,
     )
 

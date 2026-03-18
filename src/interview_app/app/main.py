@@ -22,6 +22,9 @@ def run() -> None:
     """Build and render the Streamlit page."""
     st.set_page_config(page_title="Interview Practice App", layout="wide")
 
+    if "response_language" not in st.session_state:
+        st.session_state.response_language = None
+
     render_header()
     settings = render_sidebar_controls()
     render_instructions()

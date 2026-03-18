@@ -13,6 +13,7 @@ The service layer selects one of these strategies and passes the result to `LLMC
 from dataclasses import dataclass
 
 from interview_app.prompts.prompt_templates import load_template_text
+from interview_app.utils.language import language_instruction
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ def build_zero_shot_prompt(
     seniority: str,
     job_description: str = "",
     n_questions: int = 5,
+    response_language: str = "en",
 ) -> PromptBuildResult:
     """Build a direct, instruction-only (zero-shot) prompt."""
     template = load_template_text("zero_shot")
@@ -42,7 +44,7 @@ def build_zero_shot_prompt(
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
     )
-    system_prompt = _system_prompt_for("zero_shot")
+    system_prompt = _system_prompt_for("zero_shot", response_language=response_language)
     return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="zero_shot")
 
 
@@ -53,6 +55,7 @@ def build_few_shot_prompt(
     seniority: str,
     job_description: str = "",
     n_questions: int = 5,
+    response_language: str = "en",
 ) -> PromptBuildResult:
     """Build a prompt that includes examples (few-shot) to steer format/quality."""
     template = load_template_text("few_shot")
@@ -64,7 +67,7 @@ def build_few_shot_prompt(
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
     )
-    system_prompt = _system_prompt_for("few_shot")
+    system_prompt = _system_prompt_for("few_shot", response_language=response_language)
     return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="few_shot")
 
 
@@ -75,6 +78,7 @@ def build_chain_of_thought_prompt(
     seniority: str,
     job_description: str = "",
     n_questions: int = 5,
+    response_language: str = "en",
 ) -> PromptBuildResult:
     """
     Build a prompt that encourages step-by-step reasoning.
@@ -90,7 +94,7 @@ def build_chain_of_thought_prompt(
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
     )
-    system_prompt = _system_prompt_for("chain_of_thought")
+    system_prompt = _system_prompt_for("chain_of_thought", response_language=response_language)
     return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="chain_of_thought")
 
 
@@ -101,6 +105,7 @@ def build_structured_output_prompt(
     seniority: str,
     job_description: str = "",
     n_questions: int = 5,
+    response_language: str = "en",
 ) -> PromptBuildResult:
     """Build a prompt that asks for machine-readable output (JSON)."""
     template = load_template_text("structured_output")
@@ -108,12 +113,11 @@ def build_structured_output_prompt(
         template,
         interview_type=interview_type,
         role_title=role_title,
-        senioriority=seniority,  # keep backward compatibility if template changes later
         seniority=seniority,
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
     )
-    system_prompt = _system_prompt_for("structured_output")
+    system_prompt = _system_prompt_for("structured_output", response_language=response_language)
     return PromptBuildResult(
         system_prompt=system_prompt, user_prompt=user_prompt, template_name="structured_output"
     )
@@ -126,6 +130,7 @@ def build_role_based_prompt(
     seniority: str,
     job_description: str = "",
     n_questions: int = 5,
+    response_language: str = "en",
 ) -> PromptBuildResult:
     """Build a prompt that sets a strong interviewer persona (role-based prompting)."""
     template = load_template_text("role_based")
@@ -139,16 +144,14 @@ def build_role_based_prompt(
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
     )
-    system_prompt = _system_prompt_for("role_based")
+    system_prompt = _system_prompt_for("role_based", response_language=response_language)
     return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="role_based")
 
 
-def _system_prompt_for(strategy: str) -> str:
+def _system_prompt_for(strategy: str, *, response_language: str = "en") -> str:
     """
     Return a distinct system prompt per technique.
-
-    The project rubric calls for multiple prompting techniques; making these system-level
-    differences visible helps reviewers see that distinction clearly.
+    Appends a language instruction so all output is in the requested language.
     """
 
     base = (
@@ -158,23 +161,26 @@ def _system_prompt_for(strategy: str) -> str:
 
     match strategy:
         case "zero_shot":
-            return f"{base}\n\nTechnique: Zero-shot. Use direct instructions; do not add extra commentary."
+            tech = "Technique: Zero-shot. Use direct instructions; do not add extra commentary."
         case "few_shot":
-            return f"{base}\n\nTechnique: Few-shot. Use the provided examples as a style and depth guide."
+            tech = "Technique: Few-shot. Use the provided examples as a style and depth guide."
         case "chain_of_thought":
-            return (
-                f"{base}\n\nTechnique: Chain-of-thought (private). Think step-by-step internally, "
+            tech = (
+                "Technique: Chain-of-thought (private). Think step-by-step internally, "
                 "but do not reveal hidden reasoning—output only the final questions."
             )
         case "structured_output":
-            return (
-                f"{base}\n\nTechnique: Structured output. Return valid JSON exactly matching the requested schema. "
+            tech = (
+                "Technique: Structured output. Return valid JSON exactly matching the requested schema. "
                 "No markdown, no extra keys, no trailing commentary."
             )
         case "role_based":
-            return f"{base}\n\nTechnique: Role-based. Maintain a consistent interviewer persona and tone."
+            tech = "Technique: Role-based. Maintain a consistent interviewer persona and tone."
         case _:
-            return base
+            tech = ""
+
+    prompt = f"{base}\n\n{tech}" if tech else base
+    return f"{prompt}\n\n{language_instruction(response_language)}"
 
 
 def _normalize_block(text: str) -> str:

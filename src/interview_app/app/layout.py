@@ -16,6 +16,7 @@ import streamlit as st
 from interview_app.app.controls import UISettings
 from interview_app.services.answer_evaluator import evaluate_answer
 from interview_app.services.interview_generator import generate_questions
+from interview_app.utils.language import DEFAULT_LANGUAGE, detect_language
 from interview_app.ui.display import (
     show_error,
     show_guardrail_summary,
@@ -65,6 +66,9 @@ def render_tabs(settings: UISettings) -> None:
         n_questions = st.number_input("Number of questions", min_value=1, max_value=20, value=5, step=1)
 
         if st.button("Generate questions", type="primary", use_container_width=True):
+            if st.session_state.get("response_language") is None and job_description.strip():
+                st.session_state.response_language = detect_language(job_description)
+            resolved_lang = st.session_state.get("response_language") or DEFAULT_LANGUAGE
             try:
                 with st.spinner("Generating questions..."):
                     gen_result = generate_questions(
@@ -77,6 +81,7 @@ def render_tabs(settings: UISettings) -> None:
                         model=settings.model_preset,
                         temperature=settings.temperature,
                         max_tokens=settings.max_tokens,
+                        response_language=resolved_lang,
                     )
             except Exception as e:
                 # Catch-all so UI doesn't crash; the exception is still shown for debugging.
@@ -102,6 +107,9 @@ def render_tabs(settings: UISettings) -> None:
         answer = answer_input()
 
         if st.button("Evaluate answer", type="primary", use_container_width=True):
+            if st.session_state.get("response_language") is None and (question.strip() or answer.strip()):
+                st.session_state.response_language = detect_language(question or answer)
+            resolved_lang = st.session_state.get("response_language") or DEFAULT_LANGUAGE
             try:
                 with st.spinner("Evaluating answer..."):
                     eval_result = evaluate_answer(
@@ -113,6 +121,7 @@ def render_tabs(settings: UISettings) -> None:
                         model=settings.model_preset,
                         temperature=settings.temperature,
                         max_tokens=settings.max_tokens,
+                        response_language=resolved_lang,
                     )
             except Exception as e:
                 show_error(title="Evaluation failed", body=f"Error: `{type(e).__name__}`\n\n{e}")

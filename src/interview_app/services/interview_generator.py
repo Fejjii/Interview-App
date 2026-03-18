@@ -46,6 +46,7 @@ def generate_questions(
     model: str,
     temperature: float,
     max_tokens: int,
+    response_language: str = "en",
 ) -> GenerateQuestionsResult:
     """
     Generate interview questions using a selected prompt strategy.
@@ -84,6 +85,7 @@ def generate_questions(
         seniority=seniority,
         job_description=guards["job_description"].cleaned_text if job_description else "",
         n_questions=n_questions,
+        response_language=response_language,
     )
 
     # Add a defensive instruction that the model must not reveal system/developer prompts.
@@ -112,6 +114,7 @@ def _build_prompt(
     seniority: str,
     job_description: str,
     n_questions: int,
+    response_language: str = "en",
 ) -> PromptBuildResult:
     """
     Dispatch to the correct prompt-builder function by strategy name.
@@ -135,5 +138,6 @@ def _build_prompt(
         seniority=seniority,
         job_description=job_description,
         n_questions=n_questions,
+        response_language=response_language,
     )
 
