@@ -7,6 +7,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from interview_app.app.conversation_state import (
+    clear_messages,
+    load_session_into_state,
+)
 from interview_app.app.interview_form_config import (
     DIFFICULTY_MODES,
     INTERVIEW_ROUNDS,
@@ -20,13 +24,15 @@ from interview_app.app.interview_form_config import (
     role_title_placeholder,
     validate_role_title,
 )
+from interview_app.app.ui_settings import WORKSPACE_TAB_LABELS, UISettings
 from interview_app.llm import MODEL_PRESETS
 from interview_app.prompts.personas import PERSONA_KEYS
 from interview_app.prompts.prompt_templates import load_template
-from interview_app.storage.sessions import list_sessions, load_session
-from interview_app.app.conversation_state import (
-    clear_messages,
-    load_session_into_state,
+from interview_app.storage.sessions import (
+    delete_all_sessions,
+    delete_session,
+    list_sessions,
+    load_session,
 )
 from interview_app.utils.language import (
     DEFAULT_LANGUAGE,
@@ -34,7 +40,6 @@ from interview_app.utils.language import (
     get_language_name,
     langdetect_available,
 )
-from interview_app.app.ui_settings import UISettings, WORKSPACE_TAB_LABELS
 
 
 def _sidebar_section_title(title: str, hint: str | None = None) -> None:
@@ -309,6 +314,7 @@ def render_sidebar_configuration() -> UISettings:
     # ── Saved sessions ──
     _sidebar_section_title("Saved sessions", "Reopen a stored mock interview.")
     _render_sidebar_session_list()
+    _render_sidebar_delete_all_sessions()
 
     response_language = st.session_state.get("response_language") or DEFAULT_LANGUAGE
     _, role_title_trimmed = validate_role_title(role_title_raw)
@@ -345,6 +351,15 @@ def _format_ts(raw: str) -> str:
         return raw[:16].replace("T", " ")
 
 
+def _clear_session_if_deleted(deleted_id: str) -> None:
+    """If the active session file was removed, reset in-memory chat state."""
+    if st.session_state.get("current_session_id") != deleted_id:
+        return
+    st.session_state.current_session_id = None
+    st.session_state.session_meta = None
+    clear_messages()
+
+
 def _render_sidebar_session_list() -> None:
     sb = st.sidebar
     sessions = list_sessions()
@@ -356,7 +371,7 @@ def _render_sidebar_session_list() -> None:
         sid = s.get("id", "")
         title = s.get("title", "Untitled")
         created = _format_ts(s.get("created_at", ""))
-        col_a, col_b = sb.columns([3, 1])
+        col_a, col_b, col_c = sb.columns([2, 1, 1])
         with col_a:
             sb.caption(f"**{title}**")
             if created:
@@ -374,3 +389,54 @@ def _render_sidebar_session_list() -> None:
                 else:
                     st.sidebar.error("**Load failed**")
                     st.sidebar.caption(f"Could not load session {sid}.")
+        with col_c:
+            if sb.button(
+                "Del",
+                key=f"sb_del_{sid}",
+                use_container_width=True,
+                help="Delete this saved session",
+            ):
+                if delete_session(sid):
+                    _clear_session_if_deleted(sid)
+                    st.toast("Session deleted.")
+                    st.rerun()
+                else:
+                    st.sidebar.warning("Could not delete this session (file missing or not removable).")
+
+
+def _render_sidebar_delete_all_sessions() -> None:
+    """Optional bulk delete with a confirmation step."""
+    sb = st.sidebar
+    key = "sb_confirm_delete_all"
+    if key not in st.session_state:
+        st.session_state[key] = False
+
+    has_sessions = bool(list_sessions())
+    if not has_sessions and not st.session_state[key]:
+        return
+
+    if st.session_state[key]:
+        sb.warning("Delete **all** saved sessions? This cannot be undone.")
+        c1, c2 = sb.columns(2)
+        with c1:
+            if sb.button("Confirm", key="sb_del_all_yes", use_container_width=True):
+                n = delete_all_sessions()
+                st.session_state[key] = False
+                st.session_state.current_session_id = None
+                st.session_state.session_meta = None
+                clear_messages()
+                st.toast(f"Deleted {n} session(s).")
+                st.rerun()
+        with c2:
+            if sb.button("Cancel", key="sb_del_all_no", use_container_width=True):
+                st.session_state[key] = False
+                st.rerun()
+        return
+
+    if sb.button(
+        "Delete all sessions",
+        key="sb_del_all_start",
+        use_container_width=True,
+    ):
+        st.session_state[key] = True
+        st.rerun()

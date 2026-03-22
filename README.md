@@ -4,12 +4,20 @@ Practice interviews by simulating a mock chat, generating targeted questions, an
 
 ## Features
 
-- **Sidebar configuration** — Role, seniority, job description, interview round, focus, interviewer persona, response language, and advanced options (difficulty mode, prompt strategy, model, temperature, top-p, max tokens). Shortcuts: generate questions, open mock interview, reset transcript, reopen saved sessions.
+- **Sidebar configuration** — Role, seniority, job description, interview round, focus, interviewer persona, response language, and advanced options (difficulty mode, prompt strategy, model, temperature, top-p, max tokens). Shortcuts: generate questions, open mock interview, reset transcript, reopen or delete saved sessions.
 - **Mock interview chat** — Back-and-forth practice with the coach; session save/new; configuration summary bar on the main page.
 - **Interview question generator** — Produces structured questions from your current setup (with optional debug prompts).
 - **Answer evaluation** — Paste a question and answer for scored feedback (strengths, gaps, suggestions).
 - **Dark mode** — Toggle in the sidebar; theme uses CSS tokens and Streamlit/Base Web overrides for readable contrast on inputs, dropdowns, labels, and chat.
 - **Security guards** — Input validation, length limits, moderation/rate limiting, output checks, and injection heuristics via the security pipeline (see `src/interview_app/security/`).
+
+### Saved sessions (local JSON)
+
+- **Where they live** — Each saved mock interview is a separate file under `data/sessions/` (relative to the directory from which you run `streamlit run`, unless overridden by `SESSIONS_DIR` in your environment). The folder is listed in `.gitignore` so session data is not committed.
+- **Saving** — In **Mock Interview**, use **Save** to write the current transcript and sidebar metadata to disk. **New chat** clears the live transcript without removing saved files.
+- **Sidebar list** — **Saved sessions** shows recent sessions (newest first). **Open** loads a session into the mock interview tab.
+- **Delete one** — **Del** removes that session’s file and refreshes the list. If you delete the session you currently had loaded, the in-memory transcript is cleared.
+- **Delete all** — **Delete all sessions** asks for confirmation, then removes every `*.json` file in the sessions directory and clears the loaded session state.
 
 If you want a longer narrative and diagrams, see `docs/PROJECT_OVERVIEW.md`.
 
