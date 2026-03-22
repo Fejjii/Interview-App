@@ -17,6 +17,37 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class SecuritySettings(BaseSettings):
+    """Configurable thresholds and toggles for the security / guardrail layer."""
+
+    model_config = SettingsConfigDict(env_prefix="SECURITY_", extra="ignore")
+
+    max_input_length: int = Field(
+        default=8000,
+        description="Maximum allowed characters for a single user input.",
+    )
+    rate_limit_max_requests: int = Field(
+        default=20,
+        description="Max LLM requests allowed per rate-limit window.",
+    )
+    rate_limit_window_seconds: int = Field(
+        default=60,
+        description="Rate-limit sliding window in seconds.",
+    )
+    moderation_enabled: bool = Field(
+        default=True,
+        description="Enable lightweight content moderation.",
+    )
+    output_max_length: int = Field(
+        default=16000,
+        description="Maximum characters for model output before truncation.",
+    )
+    prompt_injection_strict: bool = Field(
+        default=False,
+        description="When True, use stricter (more false-positives) injection detection.",
+    )
+
+
 class Settings(BaseSettings):
     """
     Application settings loaded from environment variables and an optional `.env` file.
@@ -43,6 +74,12 @@ class Settings(BaseSettings):
     openai_temperature: float = Field(
         default=0.2, ge=0.0, le=2.0, description="Default sampling temperature."
     )
+    sessions_dir: str = Field(
+        default="data/sessions",
+        description="Directory for lightweight session JSON files (relative to cwd or absolute).",
+    )
+
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
 
 
 @lru_cache(maxsize=1)
@@ -54,4 +91,9 @@ def get_settings() -> Settings:
     keeps config access fast and consistent during a session.
     """
     return Settings()
+
+
+def get_security_settings() -> SecuritySettings:
+    """Shortcut to access the security sub-config."""
+    return get_settings().security
 

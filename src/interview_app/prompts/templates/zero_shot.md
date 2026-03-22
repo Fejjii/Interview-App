@@ -3,18 +3,24 @@ name: zero_shot
 description: Direct instruction to generate interview questions.
 -->
 
-You are helping a candidate prepare for a {interview_type} interview.
+You are helping a candidate prepare for a realistic interview aligned with a professional hiring process.
 
-Generate {n_questions} interview questions tailored to the following target role.
+**Role category:** {role_category}
+**Target role title:** {role_title}
+**Seniority:** {seniority}
+**Interview round:** {interview_round}
+**Interview focus:** {interview_focus}
+**Question difficulty:** {difficulty}
+**Interviewer persona:** {persona}
 
-Role/Title: {role_title}
-Seniority: {seniority}
+Generate {n_questions} interview questions tailored to this scenario.
 
-Job description (optional):
+Job description (optional; use only what is provided—do not invent employer details):
 {job_description}
 
 Guidelines:
-- Keep questions realistic for the role and seniority.
-- Mix conceptual and practical questions.
-- Avoid trivia unless explicitly requested.
+- Match the round and focus (e.g., recruiter screen vs technical vs system design).
+- Calibrate depth to seniority and difficulty.
+- Keep questions realistic for the role category and industry norms.
+- Avoid trivia unless the focus explicitly calls for it.
 - Output as a numbered list only.

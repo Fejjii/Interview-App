@@ -3,15 +3,13 @@ from __future__ import annotations
 """
 Prompt-building functions ("prompt strategies").
 
-This module is deliberately *pure* (no Streamlit, no OpenAI calls):
-- Inputs: interview type, role, seniority, job description, number of questions…
-- Output: a pair of strings: `system_prompt` + `user_prompt`
-
-The service layer selects one of these strategies and passes the result to `LLMClient`.
+Pure module (no Streamlit, no OpenAI calls): maps interview context to
+`system_prompt` + `user_prompt` pairs for `LLMClient`.
 """
 
 from dataclasses import dataclass
 
+from interview_app.prompts.personas import get_persona_prompt
 from interview_app.prompts.prompt_templates import load_template_text
 from interview_app.utils.language import language_instruction
 
@@ -27,58 +25,86 @@ class PromptBuildResult:
 
 def build_zero_shot_prompt(
     *,
-    interview_type: str,
+    role_category: str,
     role_title: str,
     seniority: str,
+    interview_round: str,
+    interview_focus: str,
     job_description: str = "",
     n_questions: int = 5,
     response_language: str = "en",
+    difficulty: str = "Medium",
+    persona: str = "Hiring Manager",
 ) -> PromptBuildResult:
     """Build a direct, instruction-only (zero-shot) prompt."""
     template = load_template_text("zero_shot")
     user_prompt = _format_template(
         template,
-        interview_type=interview_type,
+        role_category=role_category,
         role_title=role_title,
         seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
+        difficulty=difficulty,
+        persona=persona,
     )
-    system_prompt = _system_prompt_for("zero_shot", response_language=response_language)
-    return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="zero_shot")
+    system_prompt = _system_prompt_for(
+        "zero_shot", response_language=response_language, persona=persona
+    )
+    return PromptBuildResult(
+        system_prompt=system_prompt, user_prompt=user_prompt, template_name="zero_shot"
+    )
 
 
 def build_few_shot_prompt(
     *,
-    interview_type: str,
+    role_category: str,
     role_title: str,
     seniority: str,
+    interview_round: str,
+    interview_focus: str,
     job_description: str = "",
     n_questions: int = 5,
     response_language: str = "en",
+    difficulty: str = "Medium",
+    persona: str = "Hiring Manager",
 ) -> PromptBuildResult:
     """Build a prompt that includes examples (few-shot) to steer format/quality."""
     template = load_template_text("few_shot")
     user_prompt = _format_template(
         template,
-        interview_type=interview_type,
+        role_category=role_category,
         role_title=role_title,
         seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
+        difficulty=difficulty,
+        persona=persona,
     )
-    system_prompt = _system_prompt_for("few_shot", response_language=response_language)
-    return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="few_shot")
+    system_prompt = _system_prompt_for(
+        "few_shot", response_language=response_language, persona=persona
+    )
+    return PromptBuildResult(
+        system_prompt=system_prompt, user_prompt=user_prompt, template_name="few_shot"
+    )
 
 
 def build_chain_of_thought_prompt(
     *,
-    interview_type: str,
+    role_category: str,
     role_title: str,
     seniority: str,
+    interview_round: str,
+    interview_focus: str,
     job_description: str = "",
     n_questions: int = 5,
     response_language: str = "en",
+    difficulty: str = "Medium",
+    persona: str = "Hiring Manager",
 ) -> PromptBuildResult:
     """
     Build a prompt that encourages step-by-step reasoning.
@@ -88,75 +114,113 @@ def build_chain_of_thought_prompt(
     template = load_template_text("chain_of_thought")
     user_prompt = _format_template(
         template,
-        interview_type=interview_type,
+        role_category=role_category,
         role_title=role_title,
         seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
+        difficulty=difficulty,
+        persona=persona,
     )
-    system_prompt = _system_prompt_for("chain_of_thought", response_language=response_language)
-    return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="chain_of_thought")
+    system_prompt = _system_prompt_for(
+        "chain_of_thought", response_language=response_language, persona=persona
+    )
+    return PromptBuildResult(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        template_name="chain_of_thought",
+    )
 
 
 def build_structured_output_prompt(
     *,
-    interview_type: str,
+    role_category: str,
     role_title: str,
     seniority: str,
+    interview_round: str,
+    interview_focus: str,
     job_description: str = "",
     n_questions: int = 5,
     response_language: str = "en",
+    difficulty: str = "Medium",
+    persona: str = "Hiring Manager",
 ) -> PromptBuildResult:
     """Build a prompt that asks for machine-readable output (JSON)."""
     template = load_template_text("structured_output")
     user_prompt = _format_template(
         template,
-        interview_type=interview_type,
+        role_category=role_category,
         role_title=role_title,
         seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
+        difficulty=difficulty,
+        persona=persona,
     )
-    system_prompt = _system_prompt_for("structured_output", response_language=response_language)
+    system_prompt = _system_prompt_for(
+        "structured_output", response_language=response_language, persona=persona
+    )
     return PromptBuildResult(
-        system_prompt=system_prompt, user_prompt=user_prompt, template_name="structured_output"
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        template_name="structured_output",
     )
 
 
 def build_role_based_prompt(
     *,
-    interview_type: str,
+    role_category: str,
     role_title: str,
     seniority: str,
+    interview_round: str,
+    interview_focus: str,
     job_description: str = "",
     n_questions: int = 5,
     response_language: str = "en",
+    difficulty: str = "Medium",
+    persona: str = "Hiring Manager",
 ) -> PromptBuildResult:
     """Build a prompt that sets a strong interviewer persona (role-based prompting)."""
     template = load_template_text("role_based")
-    # This template includes "System role:" content; we still keep an outer system prompt
-    # for consistent safety / formatting behavior.
     user_prompt = _format_template(
         template,
-        interview_type=interview_type,
+        role_category=role_category,
         role_title=role_title,
         seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
         job_description=_normalize_block(job_description),
         n_questions=n_questions,
+        difficulty=difficulty,
+        persona=persona,
     )
-    system_prompt = _system_prompt_for("role_based", response_language=response_language)
-    return PromptBuildResult(system_prompt=system_prompt, user_prompt=user_prompt, template_name="role_based")
+    system_prompt = _system_prompt_for(
+        "role_based", response_language=response_language, persona=persona
+    )
+    return PromptBuildResult(
+        system_prompt=system_prompt, user_prompt=user_prompt, template_name="role_based"
+    )
 
 
-def _system_prompt_for(strategy: str, *, response_language: str = "en") -> str:
+def _system_prompt_for(
+    strategy: str,
+    *,
+    response_language: str = "en",
+    persona: str = "Hiring Manager",
+) -> str:
     """
     Return a distinct system prompt per technique.
-    Appends a language instruction so all output is in the requested language.
+    Appends persona tone and language instruction.
     """
 
     base = (
-        "You are an AI interview assistant helping a candidate prepare. "
-        "Follow instructions precisely, stay role-relevant, and avoid hallucinating specifics."
+        "You are an AI interview assistant helping a candidate prepare for a realistic hiring "
+        "conversation. Follow instructions precisely, stay role-relevant, and avoid inventing "
+        "employer-specific facts that were not provided."
     )
 
     match strategy:
@@ -180,6 +244,8 @@ def _system_prompt_for(strategy: str, *, response_language: str = "en") -> str:
             tech = ""
 
     prompt = f"{base}\n\n{tech}" if tech else base
+    persona_fragment = get_persona_prompt(persona)
+    prompt = f"{prompt}\n\nInterviewer tone: {persona_fragment}"
     return f"{prompt}\n\n{language_instruction(response_language)}"
 
 
@@ -190,7 +256,4 @@ def _normalize_block(text: str) -> str:
 
 
 def _format_template(template: str, **kwargs: object) -> str:
-    # Very small and explicit formatting surface for the scaffold.
-    # Callers should provide all expected keys for the chosen template.
     return template.format(**kwargs)
-

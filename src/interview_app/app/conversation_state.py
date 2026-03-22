@@ -1,0 +1,95 @@
+"""
+Conversation state for the chat-based interview flow.
+
+Initializes and updates st.session_state for:
+- messages (chat history)
+- current_session_id, session_meta (role, difficulty, etc.)
+Helpers: get_messages, append_message, clear_messages, load_session_into_state.
+"""
+
+from __future__ import annotations
+
+import streamlit as st
+
+from interview_app.app.ui_settings import UISettings
+from interview_app.utils.types import ChatMessage, SessionMeta
+
+
+def init_session_state() -> None:
+    """Ensure required keys exist in st.session_state for chat and sessions."""
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "current_session_id" not in st.session_state:
+        st.session_state.current_session_id = None
+    if "session_meta" not in st.session_state:
+        st.session_state.session_meta = None
+    if "response_language" not in st.session_state:
+        st.session_state.response_language = None
+    if "last_scores" not in st.session_state:
+        st.session_state.last_scores = []  # for adaptive difficulty
+    if "ia_pending_generate" not in st.session_state:
+        st.session_state.ia_pending_generate = False
+
+
+def get_messages() -> list[ChatMessage]:
+    """Return the current list of chat messages (safe copy for read)."""
+    init_session_state()
+    raw = st.session_state.messages
+    out = []
+    for m in raw:
+        if isinstance(m, dict):
+            out.append(ChatMessage(role=m.get("role", "user"), content=m.get("content", "")))
+        elif isinstance(m, ChatMessage):
+            out.append(m)
+        else:
+            out.append(ChatMessage(role="user", content=str(m)))
+    return out
+
+
+def append_message(role: str, content: str) -> None:
+    """Append a single message to session state. Role is 'user' or 'assistant'."""
+    init_session_state()
+    st.session_state.messages.append(ChatMessage(role=role, content=content))
+
+
+def clear_messages() -> None:
+    """Clear chat history; keep session id and meta unless explicitly cleared elsewhere."""
+    init_session_state()
+    st.session_state.messages = []
+    st.session_state.last_scores = []
+
+
+def snapshot_meta_from_settings(settings: UISettings, session_id: str | None, title: str = "") -> SessionMeta:
+    """Build SessionMeta from current UISettings for saving a session."""
+    from datetime import datetime
+
+    return SessionMeta(
+        id=session_id or "",
+        created_at=datetime.utcnow().isoformat() + "Z",
+        role_category=settings.role_category,
+        role_title=settings.role_title,
+        seniority=settings.seniority,
+        difficulty=settings.effective_question_difficulty,
+        difficulty_mode=settings.question_difficulty_mode,
+        interview_round=settings.interview_round,
+        interview_focus=settings.interview_focus,
+        interview_type=settings.interview_focus,
+        persona=settings.persona,
+        title=title or "Untitled session",
+    )
+
+
+def load_session_into_state(session_id: str, meta: SessionMeta, messages: list[dict]) -> None:
+    """Load a saved session into session state so the chat re-renders."""
+    init_session_state()
+    st.session_state.current_session_id = session_id
+    st.session_state.session_meta = meta
+    st.session_state.messages = [
+        ChatMessage(role=m.get("role", "user"), content=m.get("content", "")) for m in messages
+    ]
+
+
+def messages_for_llm(messages: list[ChatMessage], last_n: int = 10) -> list[dict]:
+    """Convert ChatMessage list to OpenAI-style extra_messages (last N turns)."""
+    trimmed = messages[-(last_n * 2) :] if last_n else messages
+    return [{"role": m.role, "content": m.content} for m in trimmed]

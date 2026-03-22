@@ -1,32 +1,38 @@
+"""Top-level Streamlit app runner.
+
+Composition root: page config, theme injection, sidebar configuration, main workspace.
+"""
+
 from __future__ import annotations
-
-"""
-Top-level Streamlit app runner.
-
-This module is the "composition root" for the UI:
-- configures the Streamlit page (title, layout)
-- renders the header and sidebar controls
-- renders the main tabs and wires buttons to service functions
-
-Entry chain:
-`streamlit_app.py` → `interview_app.app.main.run()`
-"""
 
 import streamlit as st
 
-from interview_app.app.controls import render_sidebar_controls
-from interview_app.app.layout import render_header, render_instructions, render_tabs
+from interview_app.app.controls import render_sidebar_configuration
+from interview_app.app.conversation_state import init_session_state
+from interview_app.app.layout import (
+    render_hero_header,
+    render_main_content,
+)
+from interview_app.ui.theme import inject_theme
+
+
+def _init_dark_mode() -> None:
+    """Ensure dark_mode key exists in session state."""
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
 
 
 def run() -> None:
     """Build and render the Streamlit page."""
-    st.set_page_config(page_title="Interview Practice App", layout="wide")
+    st.set_page_config(
+        page_title="AI Interview Preparation Assistant",
+        page_icon="\U0001f3af",
+        layout="wide",
+    )
+    _init_dark_mode()
+    inject_theme()
+    init_session_state()
 
-    if "response_language" not in st.session_state:
-        st.session_state.response_language = None
-
-    render_header()
-    settings = render_sidebar_controls()
-    render_instructions()
-    render_tabs(settings)
-
+    settings = render_sidebar_configuration()
+    render_hero_header()
+    render_main_content(settings)

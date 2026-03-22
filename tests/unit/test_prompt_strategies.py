@@ -20,9 +20,11 @@ from interview_app.prompts.prompt_strategies import (
 def test_prompt_strategies_return_non_empty_prompts() -> None:
     """All strategies should return usable prompt strings."""
     common = {
-        "interview_type": "Behavioral",
+        "role_category": "Software Engineering",
         "role_title": "Software Engineer",
         "seniority": "Senior",
+        "interview_round": "Technical Interview",
+        "interview_focus": "Technical Knowledge",
         "job_description": "Build APIs; collaborate with product; write tests.",
         "n_questions": 5,
     }
@@ -44,11 +46,12 @@ def test_prompt_strategies_return_non_empty_prompts() -> None:
 def test_structured_output_template_mentions_json() -> None:
     """Structured output strategy should request JSON (for easier parsing)."""
     res = build_structured_output_prompt(
-        interview_type="System design",
+        role_category="Software Engineering",
         role_title="Backend Engineer",
-        seniority="Mid",
+        seniority="Mid-Level",
+        interview_round="System Design Interview",
+        interview_focus="System Design / Architecture",
         job_description="Design scalable APIs.",
         n_questions=3,
     )
     assert "json" in res.user_prompt.lower()
-

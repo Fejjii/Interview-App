@@ -13,3 +13,6 @@ dist/
 debug-*.log
 **/debug-*.log
 
+# local session / app data (do not commit)
+data/
+

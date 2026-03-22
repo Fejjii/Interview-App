@@ -1,14 +1,6 @@
 from __future__ import annotations
 
-"""
-Streamlit entrypoint for the Interview Practice App.
-
-Why this file exists:
-- Streamlit expects a single script to run (e.g. `streamlit run streamlit_app.py`).
-- The application code itself lives under `src/interview_app/` (a proper Python package).
-- This wrapper makes sure `src/` is importable and loads the optional `.env` file so
-  environment-based configuration works regardless of the current working directory.
-"""
+"""AI Interview Coach app."""
 
 import sys
 from pathlib import Path

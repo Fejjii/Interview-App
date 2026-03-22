@@ -1,11 +1,17 @@
 # Interview Practice App (Streamlit + OpenAI)
 
-Practice interviews by generating questions and evaluating answers with an LLM, wrapped in a small Streamlit UI.
+Practice interviews by simulating a mock chat, generating targeted questions, and evaluating answers with an LLM—wrapped in a Streamlit UI with sidebar configuration, optional dark mode, and security guardrails.
 
-- **What you do**: pick interview type + prompt strategy + model settings → generate questions or evaluate an answer.
-- **What you can learn**: prompt engineering techniques, basic guardrails, and how to wire Streamlit → services → OpenAI cleanly.
+## Features
 
-If you want a longer narrative + diagrams, see `docs/PROJECT_OVERVIEW.md`.
+- **Sidebar configuration** — Role, seniority, job description, interview round, focus, interviewer persona, response language, and advanced options (difficulty mode, prompt strategy, model, temperature, top-p, max tokens). Shortcuts: generate questions, open mock interview, reset transcript, reopen saved sessions.
+- **Mock interview chat** — Back-and-forth practice with the coach; session save/new; configuration summary bar on the main page.
+- **Interview question generator** — Produces structured questions from your current setup (with optional debug prompts).
+- **Answer evaluation** — Paste a question and answer for scored feedback (strengths, gaps, suggestions).
+- **Dark mode** — Toggle in the sidebar; theme uses CSS tokens and Streamlit/Base Web overrides for readable contrast on inputs, dropdowns, labels, and chat.
+- **Security guards** — Input validation, length limits, moderation/rate limiting, output checks, and injection heuristics via the security pipeline (see `src/interview_app/security/`).
+
+If you want a longer narrative and diagrams, see `docs/PROJECT_OVERVIEW.md`.
 
 ## Quick start (Windows PowerShell)
 
@@ -39,91 +45,49 @@ Runtime flow (one request):
 
 1. **Entry**: `streamlit_app.py` starts Streamlit, adds `src/` to the import path, loads `.env`, then calls `interview_app.app.main.run()`.
 2. **UI**: `src/interview_app/app/main.py` builds the page and calls:
-   - `src/interview_app/app/controls.py` to render the sidebar and return a `UISettings` snapshot.
-   - `src/interview_app/app/layout.py` to render tabs and handle button clicks.
-3. **Services (domain logic)**: button clicks call:
-   - `src/interview_app/services/interview_generator.py::generate_questions`
-   - `src/interview_app/services/answer_evaluator.py::evaluate_answer`
-4. **Security + prompts + LLM** (inside services):
-   - guardrails: `src/interview_app/security/guards.py`
-   - prompt strategies/templates: `src/interview_app/prompts/prompt_strategies.py` + `src/interview_app/prompts/prompt_templates.py` + `src/interview_app/prompts/templates/*.md`
-   - OpenAI call: `src/interview_app/llm/openai_client.py::LLMClient` (with presets from `src/interview_app/llm/model_settings.py`)
-5. **Display**: results and debug info are rendered via `src/interview_app/ui/display.py` and inputs come from `src/interview_app/ui/widgets.py`.
+   - `src/interview_app/app/controls.py` — `render_sidebar_configuration()` returns a `UISettings` snapshot.
+   - `src/interview_app/app/layout.py` — hero, configuration pill bar, workspace (Mock Interview / Questions / Feedback), chat and service wiring.
+   - `src/interview_app/ui/theme.py` — light/dark CSS and custom HTML styling.
+3. **Services**: `interview_generator`, `answer_evaluator`, `chat_service` call the LLM after guardrails.
+4. **Security + prompts + LLM**: `security/pipeline.py`, `guards.py`, prompts and templates, `llm/openai_client.py`.
+5. **Display**: `ui/display.py`, `ui/widgets.py`. Sessions: `storage/sessions.py`.
 
 ## Prompt strategies (5 techniques)
 
-Selectable in the sidebar (`Prompt strategy`):
+Selectable under **Advanced settings** in the sidebar:
 
-- `zero_shot`
-- `few_shot`
-- `chain_of_thought` (asks the model to reason internally, but not reveal hidden reasoning)
-- `structured_output` (asks for JSON)
-- `role_based` (interviewer persona)
+- `zero_shot`, `few_shot`, `chain_of_thought`, `structured_output`, `role_based`
 
-Turn on **Show debug** in the sidebar to see the exact **system + user prompts** for each run.
+Turn on **Show debug** to see system + user prompts when supported.
 
-## Guardrails (what’s blocked / sanitized)
+## Guardrails
 
-Before any OpenAI call, user inputs go through `src/interview_app/security/guards.py`:
+User inputs are validated and passed through the security pipeline (`security/pipeline.py`) where configured: length limits, moderation, rate limiting, injection heuristics, and output guarding. See unit tests under `tests/unit/test_*.py` for guards, pipeline, and moderation.
 
-- **Validation**: empty input and length limits
-- **Sanitization**: basic secret redaction (best-effort)
-- **Injection detection**: simple phrase/regex heuristics; blocks requests when suspected
+## File map (selected)
 
-## File map (what each file does)
-
-### Root
-
-- `streamlit_app.py`: Streamlit entrypoint; ensures `src/` imports work and loads `.env`, then calls `interview_app.app.main.run()`.
-- `requirements.txt`: runtime + dev dependencies.
-- `.env.example`: documented environment variables (copy to `.env` locally).
-- `Makefile`: convenience commands (optional).
-- `docs/`: deeper documentation (architecture, development notes, testing notes).
-- `scripts/demo_proof.py`: small console demo to sanity-check templates + guardrails + prompt building.
-
-### Application package (`src/interview_app/`)
-
-- `app/main.py`: UI composition root (page config + header + sidebar + tabs).
-- `app/controls.py`: sidebar widgets; returns `UISettings` (all user-selected knobs).
-- `app/layout.py`: page layout + tab rendering; wires buttons to service calls.
-- `services/interview_generator.py`: generates interview questions (guardrails → prompt strategy → LLM call).
-- `services/answer_evaluator.py`: evaluates an answer (guardrails → evaluator prompt → LLM call).
-- `prompts/prompt_templates.py`: loads `.md` templates from `prompts/templates/` safely.
-- `prompts/prompt_strategies.py`: builds system/user prompts for each technique.
-- `prompts/templates/*.md`: the actual prompt templates (human-editable).
-- `security/guards.py`: guardrails (validate/sanitize/detect injection) + system prompt hardening helper.
-- `llm/openai_client.py`: `LLMClient` wrapper around the OpenAI Python SDK; returns `LLMResponse`.
-- `llm/model_settings.py`: model preset keys + default params used by the UI.
-- `config/settings.py`: `Settings` loader (env + optional `.env`) + cached `get_settings()`.
-- `ui/widgets.py`: reusable Streamlit input widgets (text areas).
-- `ui/display.py`: reusable Streamlit display helpers (errors, responses, debug).
-- `utils/types.py`: shared Pydantic models (`LLMResponse`, `LLMUsage`).
-
-### Tests (`tests/`)
-
-- `tests/conftest.py`: adds `src/` to `sys.path` for tests.
-- `tests/unit/test_config.py`: settings defaults + env overrides.
-- `tests/unit/test_guardrails.py`: guardrails behavior.
-- `tests/unit/test_prompt_strategies.py`: prompt strategies return non-empty prompts.
-- `tests/integration/test_openai_client_smoke.py`: optional OpenAI smoke test (skips without `OPENAI_API_KEY`).
+| Path | Role |
+|------|------|
+| `streamlit_app.py` | Entrypoint; `sys.path` + `.env` + `main.run()` |
+| `app/main.py` | Page config, theme, sidebar + main composition |
+| `app/controls.py` | Sidebar UI → `UISettings` |
+| `app/layout.py` | Main workspace, chat, questions tab, feedback tab |
+| `app/ui_settings.py` | `UISettings` dataclass |
+| `app/conversation_state.py` | Chat + session state helpers |
+| `ui/theme.py` | Light/dark CSS |
+| `services/chat_service.py` | Mock interview turns |
+| `storage/sessions.py` | Saved session JSON |
 
 ## Tests
 
-Run all tests:
-
 ```bash
 pytest
-```
-
-Run only unit tests:
-
-```bash
 pytest tests/unit
 ```
 
-Integration tests are safe by default and will skip unless `OPENAI_API_KEY` is set.
+Integration tests skip unless `OPENAI_API_KEY` is set.
 
-## Lint / Format / Typecheck
+## Lint / format / typecheck
 
 ```bash
 ruff check src tests
@@ -131,16 +95,6 @@ black src tests
 mypy src
 ```
 
-## Makefile (optional)
+## Deployment (Docker + cloud)
 
-If you have `make` available:
-
-```bash
-make install
-make run
-make test
-make lint
-make format
-make typecheck
-```
-
+See `docs/DEPLOYMENT.md` for Docker and cloud notes.
