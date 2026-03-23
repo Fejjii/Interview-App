@@ -78,11 +78,12 @@ flowchart LR
 
 ## Prompts and strategies
 
-- **Interview / feedback:** `prompts/prompt_strategies.py` composes system and user prompts from templates in `prompts/prompt_templates.py` and selected strategy names (e.g. zero-shot, few-shot).
+- **Interview question generation:** `prompts/prompt_strategies.py` composes system and user prompts from templates in `prompts/prompt_templates.py` and selected strategy names (`zero_shot`, `few_shot`, `chain_of_thought`, `structured_output`, `role_based`). The sidebar **Prompt strategy** select (`app/controls.py`) maps labels to these keys on `UISettings.prompt_strategy`. `services/interview_generator.generate_questions_from_settings` centralizes wiring from `UISettings`. The Interview Questions tab can run **Compare Prompt Strategies** (three strategies side by side via `COMPARE_PROMPT_STRATEGY_KEYS` in `app/ui_settings.py`).
+- **Answer feedback:** `answer_evaluator.py` uses a fixed coach-style system prompt (not the five strategies above).
 - **Personas:** `prompts/personas.py` supplies interviewer voice for relevant flows.
 - **CV:** `cv/prompt_builders.py` holds CV-specific system/user strings; models in `cv/models.py`.
 
-Adding a new strategy: implement a builder returning `PromptBuildResult`, register it in the strategy registry, expose it in `controls.py`, and add a unit test for prompt shape (see [development.md](development.md)).
+Adding a new strategy: implement a builder returning `PromptBuildResult`, register it in `interview_generator._build_prompt`, add a row to `PROMPT_STRATEGY_OPTIONS` in `app/ui_settings.py`, and add a unit test for prompt shape (see [development.md](development.md)).
 
 ---
 

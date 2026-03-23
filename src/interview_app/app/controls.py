@@ -27,7 +27,12 @@ from interview_app.app.interview_form_config import (
     role_title_placeholder,
     validate_role_title,
 )
-from interview_app.app.ui_settings import WORKSPACE_TAB_LABELS, UISettings
+from interview_app.app.ui_settings import (
+    PROMPT_STRATEGY_OPTIONS,
+    WORKSPACE_TAB_LABELS,
+    UISettings,
+    prompt_strategy_key_from_label,
+)
 from interview_app.llm import MODEL_PRESETS
 from interview_app.prompts.personas import PERSONA_KEYS
 from interview_app.storage.sessions import (
@@ -196,6 +201,20 @@ def render_sidebar_configuration() -> UISettings:
     persona = str(st.session_state.get("persona_sel", PERSONA_KEYS[1]))
 
     sb.divider()
+    _sidebar_section_title(
+        "Prompt Strategy",
+        "How interview questions are generated (Interview Questions tab and mock interview question turns).",
+    )
+    strategy_labels = [lbl for lbl, _ in PROMPT_STRATEGY_OPTIONS]
+    selected_label = sb.selectbox(
+        "Prompt strategy",
+        options=strategy_labels,
+        key="ia_prompt_strategy_select",
+        help="Choose a prompting technique. Use “Compare Prompt Strategies” on the Interview Questions tab to preview several at once.",
+    )
+    prompt_strategy = prompt_strategy_key_from_label(selected_label)
+
+    sb.divider()
     sb.caption("Switch workspace or reset the transcript.")
     b1, b2, b3 = sb.columns(3)
     with b1:
@@ -251,7 +270,6 @@ def render_sidebar_configuration() -> UISettings:
 
     # Internal defaults for model / sampling (Advanced sidebar removed; services unchanged)
     question_difficulty_mode = "Auto"
-    prompt_strategy = "zero_shot"
     preset_keys = list(MODEL_PRESETS.keys())
     model_preset = "gpt-4o-mini" if "gpt-4o-mini" in preset_keys else preset_keys[0]
     preset = MODEL_PRESETS[model_preset]

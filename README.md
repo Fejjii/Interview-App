@@ -8,7 +8,7 @@ A **Streamlit** web app that helps candidates practice technical and behavioral 
 
 | Area | What it does |
 |------|----------------|
-| **Sidebar configuration** | Role category, seniority, job description, interview round, focus, interviewer persona, response language, and generation settings (model preset, temperature, top-p, max tokens). Shortcuts for generating questions, opening the mock interview, resetting the transcript, and managing saved sessions. |
+| **Sidebar configuration** | Role category, seniority, job description, interview round, focus, interviewer persona, **prompt strategy**, response language, and generation settings (model preset, temperature, top-p, max tokens). Shortcuts for generating questions, opening the mock interview, resetting the transcript, and managing saved sessions. |
 | **Mock interview** | Turn-by-turn coaching: greetings, explicit “start interview” flows, generated questions, answer evaluation with follow-ups. |
 | **Interview questions** | Structured questions from your current setup, with optional debug prompts. |
 | **Answer feedback** | Score-style feedback with strengths, gaps, and suggestions. |
@@ -30,6 +30,28 @@ The app follows a **thin UI → services → LLM** flow:
 5. **Persistence:** `storage/sessions.py` reads/writes session JSON.
 
 For diagrams and module boundaries, see **[docs/architecture.md](docs/architecture.md)**.
+
+---
+
+## Prompt Strategies
+
+The app ships with **five** composable prompting techniques for **interview question generation** (templates under `src/interview_app/prompts/templates/`). You pick one in the sidebar under **Prompt Strategy**:
+
+| Strategy | What it does |
+|----------|----------------|
+| **Zero-shot** | Direct instructions only—no examples in the user prompt. |
+| **Few-shot** | Includes example questions so the model matches style and depth. |
+| **Chain-of-thought** | Asks the model to reason step-by-step internally (final output stays interview questions). |
+| **Structured Output** | Requests machine-readable JSON matching a schema (good for strict parsing). |
+| **Role-based** | Emphasizes a consistent interviewer persona together with your chosen persona tone. |
+
+The **Current Setup** strip at the top of the workspace shows the active strategy (e.g. `Prompt · Few-shot`). The **Interview Questions** tab also shows **Active prompt strategy** above the controls.
+
+### Strategy comparison
+
+On the **Interview Questions** tab, **Compare Prompt Strategies** runs the same sidebar configuration **three** times—**zero-shot**, **few-shot**, and **chain-of-thought**—generating **one** question per strategy. Results appear in **three bordered columns** so you can compare wording and format. (Structured Output and Role-based are selectable for normal generation but are not included in this quick comparison to limit API calls.)
+
+**Note:** Answer feedback and the CV prep pipeline use their own fixed system prompts; only the job-description-based question generator and mock-interview **question** turns follow the selected strategy.
 
 ---
 

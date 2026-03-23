@@ -18,6 +18,38 @@ WORKSPACE_TAB_LABELS: tuple[str, ...] = (
     "Feedback / Evaluation",
 )
 
+# Sidebar labels and internal keys used by `prompt_strategies` / `interview_generator`.
+PROMPT_STRATEGY_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("Zero-shot", "zero_shot"),
+    ("Few-shot", "few_shot"),
+    ("Chain-of-thought", "chain_of_thought"),
+    ("Structured Output", "structured_output"),
+    ("Role-based", "role_based"),
+)
+
+# Default comparison set (subset) for “Compare Prompt Strategies” in the Interview Questions tab.
+COMPARE_PROMPT_STRATEGY_KEYS: tuple[str, ...] = (
+    "zero_shot",
+    "few_shot",
+    "chain_of_thought",
+)
+
+
+def prompt_strategy_key_from_label(label: str) -> str:
+    """Map sidebar label to internal strategy key; unknown labels fall back to zero-shot."""
+    for lbl, key in PROMPT_STRATEGY_OPTIONS:
+        if lbl == label:
+            return key
+    return "zero_shot"
+
+
+def label_for_prompt_strategy(key: str) -> str:
+    """Human-readable label for pills and captions."""
+    for lbl, k in PROMPT_STRATEGY_OPTIONS:
+        if k == key:
+            return lbl
+    return key
+
 
 @dataclass(frozen=True)
 class UISettings:

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from interview_app.app.interview_form_config import truncate_job_description, validate_role_title
+from interview_app.app.ui_settings import UISettings
 from interview_app.llm.openai_client import LLMClient
 from interview_app.prompts import prompt_strategies
 from interview_app.prompts.prompt_strategies import PromptBuildResult
@@ -231,4 +232,44 @@ def _build_prompt(
         response_language=response_language,
         difficulty=difficulty,
         persona=persona,
+    )
+
+
+def generate_questions_from_settings(
+    *,
+    settings: UISettings,
+    prompt_strategy: str,
+    n_questions: int,
+    session_state: dict[str, Any] | None = None,
+    skip_session_rate_limit: bool = False,
+    response_language: str | None = None,
+) -> GenerateQuestionsResult:
+    """
+    Thin wrapper: map ``UISettings`` into ``generate_questions`` for a chosen strategy.
+
+    Used by the Streamlit layout (single run + comparison mode) without duplicating
+    parameter wiring.
+
+    ``response_language`` overrides ``settings.response_language`` when set (e.g. after
+    auto-detection from the job description in session state).
+    """
+    lang = response_language if response_language is not None else settings.response_language
+    return generate_questions(
+        role_category=settings.role_category,
+        role_title=settings.role_title,
+        seniority=settings.seniority,
+        interview_round=settings.interview_round,
+        interview_focus=settings.interview_focus,
+        job_description=settings.job_description,
+        n_questions=n_questions,
+        prompt_strategy=prompt_strategy,
+        model=settings.model_preset,
+        temperature=settings.temperature,
+        max_tokens=settings.max_tokens,
+        top_p=settings.top_p,
+        response_language=lang,
+        difficulty=settings.effective_question_difficulty,
+        persona=settings.persona,
+        session_state=session_state,
+        skip_session_rate_limit=skip_session_rate_limit,
     )

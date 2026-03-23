@@ -11,7 +11,7 @@ import html
 
 import streamlit as st
 
-from interview_app.app.ui_settings import UISettings
+from interview_app.app.ui_settings import UISettings, label_for_prompt_strategy
 
 _FONT_IMPORT = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -737,6 +737,7 @@ def render_configuration_pill_bar(*, settings: UISettings) -> str:
         _pill(settings.interview_round),
         _pill(settings.interview_focus),
         _pill(settings.persona),
+        _pill(f"Prompt · {label_for_prompt_strategy(settings.prompt_strategy)}"),
         _pill(diff_note),
         _pill(settings.model_preset),
         "</div>",
