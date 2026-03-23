@@ -1,18 +1,19 @@
 """
-Streamlit main-area layout: compact header, configuration summary bar, workspace tabs.
+Streamlit main-area layout: header, configuration summary card, primary workspace navigation.
 
 Sidebar holds all configuration (`controls.render_sidebar_configuration`).
-Main area: hero, summary pills, tabbed workspace (mock interview, questions, feedback).
+Main area: hero, Current Setup card, segmented workspace nav (session `ia_workspace_tab`),
+then the active panel (mock interview, questions, CV prep, feedback).
 """
 
 from __future__ import annotations
 
+import html
 import json
 from typing import Any
 
 import streamlit as st
 
-from interview_app.app.ui_settings import UISettings, WORKSPACE_TAB_LABELS
 from interview_app.app import cv_session_state as cvs
 from interview_app.app.conversation_state import (
     append_message,
@@ -20,6 +21,14 @@ from interview_app.app.conversation_state import (
     get_messages,
     init_session_state,
     snapshot_meta_from_settings,
+)
+from interview_app.app.interview_form_config import validate_role_title
+from interview_app.app.ui_settings import WORKSPACE_TAB_LABELS, UISettings
+from interview_app.cv.models import (
+    CVAnalysisBundle,
+    CVPracticeBundle,
+    CVPracticeEvaluationBatch,
+    CVStructuredExtraction,
 )
 from interview_app.services.answer_evaluator import evaluate_answer
 from interview_app.services.chat_service import run_turn as chat_run_turn
@@ -44,19 +53,12 @@ from interview_app.ui.display import (
     show_settings_debug,
 )
 from interview_app.ui.theme import render_configuration_pill_bar
-from interview_app.app.interview_form_config import validate_role_title
 from interview_app.ui.widgets import (
     answer_input,
     question_context_input,
 )
 from interview_app.utils.errors import safe_user_message
 from interview_app.utils.language import DEFAULT_LANGUAGE, detect_language
-from interview_app.cv.models import (
-    CVAnalysisBundle,
-    CVPracticeBundle,
-    CVPracticeEvaluationBatch,
-    CVStructuredExtraction,
-)
 
 
 def render_hero_header() -> None:
@@ -72,8 +74,43 @@ def render_hero_header() -> None:
     )
 
 
+def _render_section_heading(title: str, subtitle: str) -> None:
+    """Primary section title + muted subtext (workspace panels)."""
+    safe_t = html.escape(title)
+    safe_s = html.escape(subtitle)
+    st.markdown(
+        f'<div class="ia-section-head"><h2 class="ia-section-title">{safe_t}</h2>'
+        f'<p class="ia-section-sub">{safe_s}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_workspace_navigation(tab_labels: list[str]) -> None:
+    """
+    Primary workspace navigation (segmented control).
+
+    Uses `ia_workspace_tab` session state so sidebar shortcuts stay in sync.
+    (Streamlit `st.tabs` cannot be driven from session state; segmented buttons do.)
+    """
+    st.markdown('<div class="ia-workspace-nav-label">Workspace</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        cols = st.columns(len(tab_labels), gap="small")
+        for i, label in enumerate(tab_labels):
+            with cols[i]:
+                active = st.session_state.ia_workspace_tab == label
+                if st.button(
+                    label,
+                    key=f"ia_ws_nav_{i}",
+                    use_container_width=True,
+                    type="primary" if active else "secondary",
+                ):
+                    st.session_state.ia_workspace_tab = label
+                    st.rerun()
+    st.divider()
+
+
 def render_main_content(settings: UISettings) -> None:
-    """Workspace: summary bar + tabs (mock interview, questions, feedback)."""
+    """Workspace: summary bar + primary navigation + tab panels."""
     init_session_state()
 
     render_configuration_summary_bar(settings)
@@ -84,13 +121,7 @@ def render_main_content(settings: UISettings) -> None:
     if st.session_state.ia_workspace_tab not in tab_labels:
         st.session_state.ia_workspace_tab = tab_labels[0]
 
-    st.radio(
-        "Workspace",
-        tab_labels,
-        horizontal=True,
-        key="ia_workspace_tab",
-        label_visibility="collapsed",
-    )
+    render_workspace_navigation(tab_labels)
 
     tab = st.session_state.ia_workspace_tab
 
@@ -158,9 +189,9 @@ def _render_session_row_compact(settings: UISettings) -> None:
 
 def _render_mock_interview_tab(settings: UISettings) -> None:
     """Primary workspace: session row + wide chat."""
-    st.markdown("##### Mock interview")
-    st.caption(
-        "Answer as you would live. The coach uses your sidebar configuration and adapts each turn."
+    _render_section_heading(
+        "Mock Interview",
+        "Answer as you would live. The coach uses your sidebar configuration and adapts each turn.",
     )
 
     with st.expander("How to use", expanded=False):
@@ -173,8 +204,7 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
     _render_session_row_compact(settings)
 
     messages = get_messages()
-    chat_container = st.container()
-    with chat_container:
+    with st.container(border=True):
         if not messages:
             st.info(
                 "Say hello, paste a short role summary, or type **Let's start** when you are ready for your first question."
@@ -272,8 +302,10 @@ def _maybe_run_pending_generation(settings: UISettings) -> None:
 
 def _render_question_generation_tab(settings: UISettings) -> None:
     """Generate and display structured interview questions."""
-    st.markdown("##### Interview questions")
-    st.caption("Generate a focused set of prompts from your current sidebar configuration.")
+    _render_section_heading(
+        "Interview Questions",
+        "Generate a focused set of prompts from your current sidebar configuration.",
+    )
 
     st.number_input(
         "Number of questions",
@@ -313,10 +345,10 @@ def _render_question_generation_tab(settings: UISettings) -> None:
 
 def _render_cv_interview_tab(settings: UISettings) -> None:
     """Upload CV, run extraction + interview generation with guardrails (practice vs full prep)."""
-    st.markdown("##### CV-based interview preparation")
-    st.caption(
+    _render_section_heading(
+        "CV Interview Prep",
         "Upload your resume (PDF or DOCX). Text is extracted and cleaned, summarized into structured "
-        "fields, then used for interview prep grounded in your CV."
+        "fields, then used for interview prep grounded in your CV.",
     )
 
     uploader_key = f"cv_file_uploader_v{cvs.get_cv_workspace_version(st.session_state)}"
@@ -708,7 +740,8 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
         try:
             pb = CVPracticeBundle.model_validate(practice_raw)
             show_cv_practice_bundle(bundle=pb)
-            st.markdown("##### Your practice questions")
+            st.markdown("### Your practice questions")
+            st.caption("Answer each prompt, then run evaluation when ready.")
             any_answer = False
             for i, item in enumerate(pb.practice_generation.interview_questions):
                 st.markdown(
@@ -835,8 +868,10 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
 
 def _render_answer_feedback_tab(settings: UISettings) -> None:
     """Paste question + answer; show structured evaluation."""
-    st.markdown("##### Feedback and evaluation")
-    st.caption("Evaluate a single answer against your configured role and interview context.")
+    _render_section_heading(
+        "Feedback / Evaluation",
+        "Evaluate a single answer against your configured role and interview context.",
+    )
 
     question = question_context_input()
     answer = answer_input()

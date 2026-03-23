@@ -324,6 +324,8 @@ section[data-testid="stBottom"],
 [data-testid="stChatInputContainer"] {
     background-color: var(--bg-primary) !important;
     border-top: 1px solid var(--border-primary) !important;
+    margin-top: 0.75rem !important;
+    padding-top: 0.65rem !important;
 }
 [data-testid="stChatInput"],
 [data-testid="stChatInput"] > div,
@@ -333,6 +335,8 @@ section[data-testid="stBottom"],
     background-color: var(--st-input-bg) !important;
     color: var(--st-input-text) !important;
     border-color: var(--st-input-border) !important;
+    border-radius: var(--radius-md) !important;
+    min-height: 2.75rem !important;
 }
 [data-testid="stChatInput"] textarea::placeholder {
     color: var(--st-placeholder) !important;
@@ -399,9 +403,11 @@ html, body, [data-testid="stAppViewContainer"] {{
 }}
 h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
 .block-container {{
-    padding-top: 0.75rem !important;
-    padding-bottom: 1.5rem !important;
-    max-width: min(1480px, 96vw) !important;
+    padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
+    max-width: min(1200px, 96vw) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }}
 [data-testid="stMain"] {{ background-color: var(--bg-primary) !important; }}
 [data-testid="stSidebar"] {{
@@ -424,14 +430,14 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     margin-bottom: 0.75rem !important;
 }}
 .ia-hero-title {{
-    font-size: 1.6rem !important;
+    font-size: 1.85rem !important;
     font-weight: 800 !important;
     margin: 0 0 0.4rem 0 !important;
     letter-spacing: -0.03em;
     color: var(--text-primary) !important;
 }}
 .ia-hero-compact .ia-hero-title {{
-    font-size: 1.28rem !important;
+    font-size: 1.45rem !important;
     font-weight: 700 !important;
     margin: 0 0 0.35rem 0 !important;
 }}
@@ -443,39 +449,94 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     line-height: 1.55;
 }}
 .ia-hero-compact .ia-hero-subtitle {{
-    font-size: 0.86rem !important;
+    font-size: 0.88rem !important;
     line-height: 1.45 !important;
 }}
-.ia-config-pill-bar {{
+.ia-config-card {{
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    padding: 0.85rem 1rem 1rem 1rem;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-sm);
+}}
+.ia-config-card-header {{
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin: 0 0 0.65rem 0;
+}}
+.ia-config-chips {{
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.55rem 0.75rem;
-    margin-bottom: 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
-}}
-.ia-config-pill-bar .ia-pill-label {{
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    margin-right: 0.35rem;
+    gap: 0.55rem;
 }}
 .ia-pill {{
     display: inline-flex;
     align-items: center;
-    padding: 0.22rem 0.65rem;
+    padding: 0.28rem 0.72rem;
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 500;
     color: var(--text-primary);
-    background: var(--bg-card);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     max-width: 100%;
+}}
+.ia-workspace-nav-label {{
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin: 0.25rem 0 0.5rem 0;
+}}
+.ia-section-head {{
+    margin: 0 0 1.15rem 0;
+}}
+.ia-section-title {{
+    font-size: 1.28rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.35rem 0 !important;
+    color: var(--text-primary) !important;
+}}
+.ia-section-sub {{
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin: 0;
+}}
+.ia-sidebar-section {{
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em;
+    color: var(--text-primary) !important;
+    margin: 0 0 0.35rem 0 !important;
+    padding: 0 !important;
+}}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
+    font-size: 0.78rem !important;
+    color: var(--text-secondary) !important;
+}}
+[data-testid="stMain"] div[data-testid="stVerticalBlockBorderWrapper"] {{
+    border-radius: var(--radius-lg) !important;
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-primary) !important;
+    padding: 0.95rem 1.05rem 1rem 1.05rem !important;
+    margin-bottom: 0.75rem !important;
+}}
+[data-testid="stMain"] div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] button {{
+    font-size: 0.92rem !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em !important;
+}}
+[data-testid="stSidebar"] hr {{
+    margin: 1rem 0 !important;
+    border-color: var(--border-primary) !important;
 }}
 [data-testid="stSidebar"] .block-container {{
     padding-top: 1rem !important;
@@ -589,9 +650,7 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     border-radius: var(--radius-lg);
     padding: 0.3rem;
 }}
-[data-testid="stMain"] [data-testid="stRadio"] {{
-    margin-bottom: 0.75rem;
-}}
+/* Workspace nav uses buttons; extra spacing handled in layout */
 [data-testid="stChatMessage"] {{
     border: 1px solid var(--border-primary);
     background: var(--bg-card) !important;
@@ -669,8 +728,9 @@ def render_configuration_pill_bar(*, settings: UISettings) -> str:
         else f"{mode} · {settings.effective_question_difficulty}"
     )
     parts = [
-        '<div class="ia-config-pill-bar" aria-label="Current configuration">',
-        '<span class="ia-pill-label">Current setup</span>',
+        '<div class="ia-config-card" aria-label="Current setup summary">',
+        '<div class="ia-config-card-header">Current Setup</div>',
+        '<div class="ia-config-chips">',
         _pill(settings.role_category),
         _pill(settings.role_title or "Role title"),
         _pill(settings.seniority),
@@ -679,6 +739,7 @@ def render_configuration_pill_bar(*, settings: UISettings) -> str:
         _pill(settings.persona),
         _pill(diff_note),
         _pill(settings.model_preset),
+        "</div>",
         "</div>",
     ]
     return "".join(parts)
