@@ -2,6 +2,8 @@
 
 A **Streamlit** web app that helps candidates practice technical and behavioral interviews. It combines **OpenAI** language models with configurable prompts, a mock interview chat, question generation, answer feedback, and **CV-based interview prep**—all behind a layered **security and guardrail** pipeline suitable for portfolio and local production use.
 
+**Workspace:** The main area uses **tabs** to switch between **Mock Interview**, **Interview Questions**, **CV Interview Prep**, and **Feedback / Evaluation**. The **Current Setup** strip summarizes your sidebar choices (including active **prompt strategy**).
+
 ---
 
 ## Features
@@ -9,8 +11,9 @@ A **Streamlit** web app that helps candidates practice technical and behavioral 
 | Area | What it does |
 |------|----------------|
 | **Sidebar configuration** | Role category, seniority, job description, interview round, focus, interviewer persona, **prompt strategy**, response language, and generation settings (model preset, temperature, top-p, max tokens). Shortcuts for generating questions, opening the mock interview, resetting the transcript, and managing saved sessions. |
+| **Deployment (sidebar)** | Collapsible guidance and links for hosting the app (e.g. Streamlit Community Cloud, Azure, AWS, GCP, Docker). See also **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for container and cloud notes. |
 | **Mock interview** | Turn-by-turn coaching: greetings, explicit “start interview” flows, generated questions, answer evaluation with follow-ups. |
-| **Interview questions** | Structured questions from your current setup, with optional debug prompts. |
+| **Interview questions** | Structured questions from your current setup, optional **Compare Prompt Strategies**, optional debug prompts. |
 | **Answer feedback** | Score-style feedback with strengths, gaps, and suggestions. |
 | **CV interview prep** | Upload PDF/DOCX, structured extraction, tailored questions and practice modes. |
 | **Dark mode** | Sidebar toggle; theme uses CSS tokens for readable contrast. |
@@ -115,10 +118,10 @@ Security-related variables use the `SECURITY_` prefix (see [docs/security.md](do
 From the project root (repository folder containing `streamlit_app.py`):
 
 ```powershell
-streamlit run streamlit_app.py
+python -m streamlit run streamlit_app.py
 ```
 
-Open the URL shown (typically `http://localhost:8501`).
+(`streamlit run …` also works if `streamlit` is on your `PATH`.) Open the URL shown (typically `http://localhost:8501`).
 
 ---
 
