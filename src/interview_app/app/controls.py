@@ -276,7 +276,7 @@ def render_sidebar_configuration() -> UISettings:
 
     # ── E. Workflow shortcuts ──
     _sidebar_section_title("Actions", "Jump to a workspace or reset the transcript.")
-    b1, b2 = sb.columns(2)
+    b1, b2, b3 = sb.columns(3)
     with b1:
         if sb.button(
             "Generate questions",
@@ -288,6 +288,15 @@ def render_sidebar_configuration() -> UISettings:
             st.session_state.ia_pending_generate = True
             st.rerun()
     with b2:
+        if sb.button(
+            "CV prep",
+            use_container_width=True,
+            key="sb_btn_cv",
+            help="Open CV-based interview preparation.",
+        ):
+            st.session_state.ia_workspace_tab = WORKSPACE_TAB_LABELS[2]
+            st.rerun()
+    with b3:
         if sb.button(
             "Mock interview",
             use_container_width=True,

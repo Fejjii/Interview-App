@@ -46,6 +46,14 @@ class SecuritySettings(BaseSettings):
         default=False,
         description="When True, use stricter (more false-positives) injection detection.",
     )
+    cv_max_file_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        description="Maximum upload size for CV files (PDF/DOCX).",
+    )
+    cv_max_text_chars: int = Field(
+        default=20_000,
+        description="Maximum characters of extracted CV text sent through guardrails and to the LLM.",
+    )
 
 
 class Settings(BaseSettings):

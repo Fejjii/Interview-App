@@ -8,6 +8,7 @@ from dataclasses import dataclass
 WORKSPACE_TAB_LABELS: tuple[str, ...] = (
     "Mock Interview",
     "Interview Questions",
+    "CV Interview Prep",
     "Feedback / Evaluation",
 )
 

@@ -13,6 +13,11 @@ from typing import Any
 import streamlit as st
 
 from interview_app.app.ui_settings import UISettings
+from interview_app.cv.models import (
+    CVAnalysisBundle,
+    CVPracticeBundle,
+    CVPracticeEvaluationBatch,
+)
 from interview_app.security.guards import GuardrailResult
 from interview_app.utils.types import EvaluationResult, LLMResponse
 
@@ -236,6 +241,107 @@ def show_evaluation(
 def show_evaluation_result(evaluation: EvaluationResult) -> None:
     """Render an EvaluationResult model with dashboard-style metrics."""
     show_evaluation_dashboard(evaluation)
+
+
+def show_cv_practice_bundle(*, bundle: CVPracticeBundle) -> None:
+    """Practice mode: overview + questions only (no model answers)."""
+    gen = bundle.practice_generation
+    st.markdown("##### Candidate overview")
+    st.markdown(gen.candidate_summary or "_No summary returned._")
+
+    st.markdown("**Key skills**")
+    if gen.key_skills:
+        for s in gen.key_skills:
+            st.markdown(f"- {s}")
+    else:
+        st.caption("—")
+
+    st.markdown("**Themes from your CV**")
+    if gen.themes_from_cv:
+        st.info(", ".join(gen.themes_from_cv))
+    else:
+        st.caption("—")
+
+    st.markdown("---")
+
+
+def show_cv_practice_evaluation_batch(*, batch: CVPracticeEvaluationBatch) -> None:
+    """Structured per-question feedback from practice evaluation."""
+    st.markdown("##### Feedback on your answers")
+    if not batch.evaluations:
+        st.info("No evaluation items returned.")
+        return
+
+    for i, ev in enumerate(batch.evaluations, start=1):
+        with st.container():
+            st.markdown(f"**{i}.** {ev.question}")
+            st.caption("Your answer")
+            st.markdown(ev.user_answer or "_—_")
+            if ev.score is not None:
+                st.metric("Score", f"{ev.score}/10")
+            if ev.feedback:
+                st.markdown("**Feedback**")
+                st.info(ev.feedback)
+            if ev.strengths:
+                st.markdown("**Strengths**")
+                for s in ev.strengths:
+                    st.markdown(f"- {s}")
+            if ev.gaps:
+                st.markdown("**Gaps / what is missing**")
+                for g in ev.gaps:
+                    st.markdown(f"- {g}")
+            if ev.improved_answer_suggestion:
+                st.markdown("**Improved answer suggestion**")
+                st.success(ev.improved_answer_suggestion)
+            if ev.follow_up_questions:
+                st.markdown("**Follow-up questions**")
+                for j, fq in enumerate(ev.follow_up_questions, start=1):
+                    st.markdown(f"{j}. {fq}")
+            st.markdown("---")
+
+
+def show_cv_analysis_bundle(*, bundle: CVAnalysisBundle) -> None:
+    """Render CV-grounded interview prep: summary, themes, and Q&A sections."""
+    gen = bundle.generation
+    st.markdown("##### Candidate overview")
+    st.markdown(gen.candidate_summary or "_No summary returned._")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Key skills**")
+        if gen.key_skills:
+            for s in gen.key_skills:
+                st.markdown(f"- {s}")
+        else:
+            st.caption("—")
+    with c2:
+        st.markdown("**Detected roles**")
+        if gen.detected_roles:
+            for r in gen.detected_roles:
+                st.markdown(f"- {r}")
+        else:
+            st.caption("—")
+
+    st.markdown("**Themes from your CV**")
+    if gen.themes_from_cv:
+        st.info(", ".join(gen.themes_from_cv))
+    else:
+        st.caption("—")
+
+    st.markdown("---")
+    st.markdown("##### Interview questions & answers")
+    for i, item in enumerate(gen.interview_questions, start=1):
+        with st.container():
+            st.markdown(f"**{i}. ({item.category} · {item.difficulty})** {item.question}")
+            if item.why_this_question:
+                st.caption(f"Why this question: {item.why_this_question}")
+            st.markdown("**Suggested answer**")
+            st.success(item.suggested_answer or "_—_")
+            if item.follow_up_questions:
+                st.markdown("**Follow-up questions**")
+                for j, fq in enumerate(item.follow_up_questions, start=1):
+                    st.markdown(f"{j}. {fq}")
+            st.markdown("---")
 
 
 def show_guardrail_summary(*, guardrails: dict[str, GuardrailResult]) -> None:
