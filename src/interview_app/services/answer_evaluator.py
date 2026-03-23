@@ -55,6 +55,7 @@ def evaluate_answer(
     persona: str = "Hiring Manager",
     session_state: dict[str, Any] | None = None,
     skip_session_rate_limit: bool = False,
+    openai_api_key: str | None = None,
 ) -> EvaluateAnswerResult:
     """
     Evaluate a user's answer to an interview question.
@@ -188,6 +189,7 @@ def evaluate_answer(
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p,
+            api_key=openai_api_key,
         )
         resp = client.generate_response(
             system_prompt=system_prompt,

@@ -28,6 +28,8 @@ def _minimal_settings() -> UISettings:
         max_tokens=800,
         show_debug=False,
         response_language="en",
+        usage_mode="demo",
+        byo_key_hint=None,
     )
 
 
@@ -41,6 +43,8 @@ def test_answer_general_question_uses_protect_system_prompt_and_output_pipeline(
         out = _answer_general_question(settings, messages, "How are you?")
 
     assert "thanks" in out.assistant_message.lower() or "well" in out.assistant_message.lower()
+    mock_cls.assert_called_once()
+    assert mock_cls.call_args.kwargs.get("api_key") is None
     kwargs = mock_cls.return_value.generate_response.call_args.kwargs
     assert kwargs["llm_route"] == "chat_conversational"
     assert "Security:" in kwargs["system_prompt"]
@@ -64,3 +68,17 @@ def test_answer_general_question_output_guard_failure_message() -> None:
             out = _answer_general_question(settings, messages, "Hi")
 
     assert out.assistant_message == blocked.reason
+
+
+def test_answer_general_question_passes_byo_api_key_to_client() -> None:
+    """BYO session key is forwarded to LLMClient and never appears in assistant output."""
+    resp = LLMResponse(text="Hello.", model="gpt-4o-mini", usage=None, raw_response_id=None)
+    with patch("interview_app.services.chat_service.LLMClient") as mock_cls:
+        mock_cls.return_value.generate_response.return_value = resp
+        settings = _minimal_settings()
+        messages = [ChatMessage(role="user", content="Hi")]
+        secret = "sk-test123456789012345678901234567890"
+        out = _answer_general_question(settings, messages, "Hi", openai_api_key=secret)
+
+    assert "sk-" not in out.assistant_message
+    assert mock_cls.call_args.kwargs.get("api_key") == secret

@@ -14,6 +14,7 @@ import streamlit as st
 
 from interview_app.app.controls import render_sidebar_configuration
 from interview_app.app.conversation_state import init_session_state
+from interview_app.app.usage_mode import init_usage_mode_defaults
 from interview_app.app.layout import (
     render_hero_header,
     render_main_content,
@@ -37,6 +38,7 @@ def run() -> None:
     _init_dark_mode()
     inject_theme()
     init_session_state()
+    init_usage_mode_defaults(st.session_state)
 
     settings = render_sidebar_configuration()
     render_hero_header()

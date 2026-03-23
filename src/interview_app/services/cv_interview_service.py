@@ -112,6 +112,7 @@ def run_cv_interview_pipeline(
     target_company: str = "",
     extra_job_context: str = "",
     generation_mode: CVGenerationMode = "full_prep",
+    openai_api_key: str | None = None,
 ) -> CVInterviewServiceResult:
     """
     Full pipeline: optional file extraction → guardrails → structured CV JSON → interview JSON.
@@ -374,6 +375,7 @@ def run_cv_interview_pipeline(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
+                api_key=openai_api_key,
             )
             logger.info("CV extraction LLM call starting model=%s", model)
             resp1 = client.generate_response(
@@ -539,6 +541,7 @@ def run_cv_interview_pipeline(
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p,
+            api_key=openai_api_key,
         )
         logger.info(
             "CV interview generation LLM call starting model=%s mode=%s",
@@ -729,6 +732,7 @@ def run_cv_practice_evaluation(
     max_tokens: int,
     top_p: float | None,
     session_state: dict[str, Any] | None,
+    openai_api_key: str | None = None,
 ) -> CVPracticeEvaluationServiceResult:
     """
     Evaluate user-written practice answers against structured CV and questions.
@@ -823,6 +827,7 @@ def run_cv_practice_evaluation(
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p,
+            api_key=openai_api_key,
         )
         logger.info("CV practice evaluation LLM call starting model=%s", model)
         resp = client.generate_response(

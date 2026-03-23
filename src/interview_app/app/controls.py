@@ -32,6 +32,7 @@ from interview_app.app.ui_settings import (
     UISettings,
     prompt_strategy_key_from_label,
 )
+from interview_app.app.usage_mode import KEY_BYO_KEY_HINT, KEY_USAGE_MODE, UsageMode
 from interview_app.llm import MODEL_PRESETS
 from interview_app.llm.model_settings import ModelConfig
 from interview_app.prompts.personas import PERSONA_KEYS
@@ -42,6 +43,7 @@ from interview_app.storage.sessions import (
     load_session,
 )
 from interview_app.ui.sidebar_deployment import render_sidebar_deployment
+from interview_app.ui.usage_mode_panel import render_usage_mode_setup
 from interview_app.utils.language import (
     DEFAULT_LANGUAGE,
     SUPPORTED_LANGUAGES,
@@ -77,6 +79,10 @@ def render_sidebar_configuration() -> UISettings:
     Generation (temperature, top-p, max tokens), workspace shortcuts, Saved Sessions.
     """
     sb = st.sidebar
+
+    render_usage_mode_setup()
+
+    sb.divider()
 
     # ── Deployment ──
     render_sidebar_deployment()
@@ -331,6 +337,10 @@ def render_sidebar_configuration() -> UISettings:
         manual_mode=question_difficulty_mode,
     )
 
+    usage_m = str(st.session_state.get(KEY_USAGE_MODE) or UsageMode.DEMO.value)
+    byo_hint = st.session_state.get(KEY_BYO_KEY_HINT)
+    byo_disp = byo_hint if usage_m == UsageMode.BYO.value else None
+
     return UISettings(
         role_category=role_category,
         role_title=role_title_trimmed,
@@ -348,6 +358,8 @@ def render_sidebar_configuration() -> UISettings:
         max_tokens=max_tokens,
         show_debug=show_debug,
         response_language=response_language,
+        usage_mode=usage_m,
+        byo_key_hint=byo_disp,
     )
 
 
@@ -374,7 +386,7 @@ def _clear_session_if_deleted(deleted_id: str) -> None:
 
 def _render_sidebar_session_list() -> None:
     sb = st.sidebar
-    sessions = list_sessions()
+    sessions = list_sessions(dict(st.session_state))
     if not sessions:
         sb.caption("No saved sessions yet.")
         return
@@ -390,7 +402,7 @@ def _render_sidebar_session_list() -> None:
                 sb.caption(created)
         with col_b:
             if sb.button("Open", key=f"sb_open_{sid}", use_container_width=True):
-                loaded = load_session(sid)
+                loaded = load_session(sid, dict(st.session_state))
                 if loaded:
                     meta, messages = loaded
                     load_session_into_state(sid, meta, messages)
@@ -408,7 +420,7 @@ def _render_sidebar_session_list() -> None:
                 use_container_width=True,
                 help="Delete this saved session",
             ):
-                if delete_session(sid):
+                if delete_session(sid, dict(st.session_state)):
                     _clear_session_if_deleted(sid)
                     st.toast("Session deleted.")
                     st.rerun()
@@ -423,7 +435,9 @@ def _render_sidebar_delete_all_sessions() -> None:
     if key not in st.session_state:
         st.session_state[key] = False
 
-    has_sessions = bool(list_sessions())
+    scoped_sessions = list_sessions(dict(st.session_state))
+    has_sessions = bool(scoped_sessions)
+
     if not has_sessions and not st.session_state[key]:
         return
 
@@ -432,7 +446,7 @@ def _render_sidebar_delete_all_sessions() -> None:
         c1, c2 = sb.columns(2)
         with c1:
             if sb.button("Confirm", key="sb_del_all_yes", use_container_width=True):
-                n = delete_all_sessions()
+                n = delete_all_sessions(dict(st.session_state))
                 st.session_state[key] = False
                 st.session_state.current_session_id = None
                 st.session_state.session_meta = None

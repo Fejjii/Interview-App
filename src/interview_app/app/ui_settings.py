@@ -73,3 +73,7 @@ class UISettings:
     max_tokens: int
     show_debug: bool
     response_language: str
+    # "demo" | "byo" — informational; API routing uses openai_api_key_session below.
+    usage_mode: str
+    # Masked fingerprint for BYO (e.g. sk-...a1b2); None in Demo.
+    byo_key_hint: str | None

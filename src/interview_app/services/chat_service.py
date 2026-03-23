@@ -48,6 +48,7 @@ def run_turn(
     messages: list[ChatMessage],
     *,
     session_state: dict[str, Any] | None = None,
+    openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """
     Run one coach turn. ``messages`` must already include the latest user message.
@@ -96,18 +97,24 @@ def run_turn(
     assistant_count = sum(1 for m in messages if m.role == "assistant")
     if assistant_count == 0:
         if _looks_like_explicit_start(last_user_content) or _looks_like_job_context(last_user_content):
-            return _generate_next_question(settings, messages, session_state=session_state)
+            return _generate_next_question(
+                settings, messages, session_state=session_state, openai_api_key=openai_api_key
+            )
         if _looks_like_greeting(last_user_content):
             return _reply_to_greeting(settings, last_user_content)
-        return _answer_general_question(settings, messages, last_user_content)
+        return _answer_general_question(settings, messages, last_user_content, openai_api_key=openai_api_key)
 
     intent = _infer_follow_up_intent(last_user_content)
     if intent is TurnIntent.START_INTERVIEW:
-        return _generate_next_question(settings, messages, session_state=session_state)
+        return _generate_next_question(
+            settings, messages, session_state=session_state, openai_api_key=openai_api_key
+        )
     if intent is TurnIntent.CONVERSATIONAL:
-        return _answer_general_question(settings, messages, last_user_content)
+        return _answer_general_question(settings, messages, last_user_content, openai_api_key=openai_api_key)
 
-    return _evaluate_and_follow_up(settings, messages, last_user_content, session_state=session_state)
+    return _evaluate_and_follow_up(
+        settings, messages, last_user_content, session_state=session_state, openai_api_key=openai_api_key
+    )
 
 
 def _resolve_job_description_for_chat(
@@ -133,6 +140,7 @@ def _generate_next_question(
     messages: list[ChatMessage],
     *,
     session_state: dict[str, Any] | None = None,
+    openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """Generate a single next question (first or after a follow-up)."""
     job_description = _resolve_job_description_for_chat(settings, messages)
@@ -155,6 +163,7 @@ def _generate_next_question(
         persona=settings.persona,
         session_state=session_state,
         skip_session_rate_limit=True,
+        openai_api_key=openai_api_key,
     )
 
     if not result.ok or result.response is None:
@@ -339,6 +348,8 @@ def _answer_general_question(
     settings: UISettings,
     messages: list[ChatMessage],
     last_user_content: str,
+    *,
+    openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """Answer a general/conversational question and invite back to the interview."""
     role = (settings.role_title or "").strip() or "your target"
@@ -355,6 +366,7 @@ def _answer_general_question(
             temperature=min(0.7, settings.temperature + 0.2),
             max_tokens=min(400, settings.max_tokens),
             top_p=settings.top_p,
+            api_key=openai_api_key,
         )
         extra = [{"role": m.role, "content": m.content} for m in messages[:-1]][-6:]
         resp = client.generate_response(
@@ -391,6 +403,7 @@ def _evaluate_and_follow_up(
     last_user_content: str,
     *,
     session_state: dict[str, Any] | None = None,
+    openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """Evaluate the user's answer and return feedback plus one follow-up question."""
     # Find the last assistant message (the question the user answered)
@@ -418,6 +431,7 @@ def _evaluate_and_follow_up(
         persona=settings.persona,
         session_state=session_state,
         skip_session_rate_limit=True,
+        openai_api_key=openai_api_key,
     )
 
     if not eval_result.ok or eval_result.response is None:

@@ -60,6 +60,7 @@ def generate_questions(
     persona: str = "Hiring Manager",
     session_state: dict[str, Any] | None = None,
     skip_session_rate_limit: bool = False,
+    openai_api_key: str | None = None,
 ) -> GenerateQuestionsResult:
     """
     Generate interview questions using a selected prompt strategy.
@@ -243,6 +244,7 @@ def generate_questions_from_settings(
     session_state: dict[str, Any] | None = None,
     skip_session_rate_limit: bool = False,
     response_language: str | None = None,
+    openai_api_key: str | None = None,
 ) -> GenerateQuestionsResult:
     """
     Thin wrapper: map ``UISettings`` into ``generate_questions`` for a chosen strategy.
@@ -272,4 +274,5 @@ def generate_questions_from_settings(
         persona=settings.persona,
         session_state=session_state,
         skip_session_rate_limit=skip_session_rate_limit,
+        openai_api_key=openai_api_key,
     )

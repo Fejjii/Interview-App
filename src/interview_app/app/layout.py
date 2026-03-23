@@ -15,6 +15,7 @@ from typing import Any
 import streamlit as st
 
 from interview_app.app import cv_session_state as cvs
+from interview_app.app.usage_mode import openai_api_key_for_llm
 from interview_app.app.conversation_state import (
     append_message,
     clear_messages,
@@ -145,6 +146,11 @@ def render_main_content(settings: UISettings) -> None:
         _render_answer_feedback_tab(settings)
 
 
+def _session_openai_key() -> str | None:
+    """Explicit BYO key for this Streamlit session, or None for Demo (server env key)."""
+    return openai_api_key_for_llm(dict(st.session_state))
+
+
 def render_configuration_summary_bar(settings: UISettings) -> None:
     """Compact read-only strip of active setup (replaces the old right column)."""
     st.markdown(
@@ -185,6 +191,7 @@ def _render_session_row_compact(settings: UISettings) -> None:
                     meta,
                     msgs,
                     title=session_title or "Untitled session",
+                    session_state=dict(st.session_state),
                 )
                 st.session_state.current_session_id = sid
                 st.toast(f"Saved as \"{session_title or 'Untitled'}\"")
@@ -232,7 +239,10 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
             try:
                 updated = get_messages()
                 result = chat_run_turn(
-                    settings, updated, session_state=dict(st.session_state)
+                    settings,
+                    updated,
+                    session_state=dict(st.session_state),
+                    openai_api_key=_session_openai_key(),
                 )
                 append_message("assistant", result.assistant_message)
             except Exception as exc:
@@ -272,6 +282,7 @@ def _maybe_run_pending_generation(settings: UISettings) -> None:
                 n_questions=n_questions,
                 session_state=dict(st.session_state),
                 response_language=resolved_lang,
+                openai_api_key=_session_openai_key(),
             )
     except Exception as exc:
         show_error(title="Generation failed", body=safe_user_message(exc))
@@ -387,6 +398,7 @@ def _render_question_generation_tab(settings: UISettings) -> None:
                                 session_state=dict(st.session_state),
                                 skip_session_rate_limit=False,
                                 response_language=resolved_lang,
+                                openai_api_key=_session_openai_key(),
                             )
                         except Exception as exc:
                             gen_a = None
@@ -401,6 +413,7 @@ def _render_question_generation_tab(settings: UISettings) -> None:
                                 session_state=dict(st.session_state),
                                 skip_session_rate_limit=True,
                                 response_language=resolved_lang,
+                                openai_api_key=_session_openai_key(),
                             )
                         except Exception as exc:
                             gen_b = None
@@ -724,6 +737,7 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
                         target_company=target_company,
                         extra_job_context=extra_job,
                         generation_mode="practice_questions",
+                        openai_api_key=_session_openai_key(),
                     )
             except Exception as exc:
                 st.session_state[cvs.KEY_LAST_ERROR] = safe_user_message(exc)
@@ -762,6 +776,7 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
                         target_company=target_company,
                         extra_job_context=extra_job,
                         generation_mode="full_prep",
+                        openai_api_key=_session_openai_key(),
                     )
             except Exception as exc:
                 st.session_state[cvs.KEY_LAST_ERROR] = safe_user_message(exc)
@@ -823,6 +838,7 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
                         target_company=target_company,
                         extra_job_context=extra_job,
                         generation_mode="practice_questions",
+                        openai_api_key=_session_openai_key(),
                     )
             except Exception as exc:
                 st.session_state[cvs.KEY_LAST_ERROR] = safe_user_message(exc)
@@ -857,6 +873,7 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
                         target_company=target_company,
                         extra_job_context=extra_job,
                         generation_mode="full_prep",
+                        openai_api_key=_session_openai_key(),
                     )
             except Exception as exc:
                 st.session_state[cvs.KEY_LAST_ERROR] = safe_user_message(exc)
@@ -936,6 +953,7 @@ def _render_cv_interview_tab(settings: UISettings) -> None:
                                 max_tokens=settings.max_tokens,
                                 top_p=settings.top_p,
                                 session_state=dict(st.session_state),
+                                openai_api_key=_session_openai_key(),
                             )
                     except Exception as exc:
                         st.session_state[cvs.KEY_PRACTICE_EVAL_ERROR] = safe_user_message(exc)
@@ -1050,6 +1068,7 @@ def _render_answer_feedback_tab(settings: UISettings) -> None:
                         response_language=resolved_lang,
                         persona=settings.persona,
                         session_state=dict(st.session_state),
+                        openai_api_key=_session_openai_key(),
                     )
             except Exception as exc:
                 show_error(title="Evaluation failed", body=safe_user_message(exc))

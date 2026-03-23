@@ -27,6 +27,7 @@ def question_context_input() -> str:
         placeholder="Paste the interview question you want to answer\u2026",
         height=140,
         help="Enter the exact interview question you'd like evaluated.",
+        key="ia_feedback_question",
     )
 
 
@@ -37,4 +38,5 @@ def answer_input() -> str:
         placeholder="Write your answer here\u2026",
         height=220,
         help="Write your best answer. The evaluator will score it and suggest improvements.",
+        key="ia_feedback_answer",
     )

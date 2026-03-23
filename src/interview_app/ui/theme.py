@@ -518,6 +518,41 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     margin: 0 0 0.35rem 0 !important;
     padding: 0 !important;
 }}
+[data-testid="stSidebar"] .ia-usage-status-card {{
+    margin: 0.65rem 0 0.5rem 0;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-primary);
+    background: var(--bg-secondary);
+    line-height: 1.35;
+}}
+[data-testid="stSidebar"] .ia-usage-status-title {{
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 0.2rem 0;
+}}
+[data-testid="stSidebar"] .ia-usage-status-sub {{
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    margin: 0;
+}}
+[data-testid="stSidebar"] .ia-usage-status-meta {{
+    font-size: 0.68rem;
+    color: var(--text-tertiary);
+    margin: 0.45rem 0 0 0;
+    letter-spacing: 0.01em;
+}}
+[data-testid="stSidebar"] .ia-usage-status-byo .ia-usage-status-title::before {{
+    content: "";
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-right: 0.4rem;
+    border-radius: 2px;
+    background: var(--accent);
+    vertical-align: 0.05em;
+}}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
     font-size: 0.78rem !important;
     color: var(--text-secondary) !important;
@@ -751,10 +786,15 @@ def render_configuration_pill_bar(*, settings: UISettings) -> str:
         if mode == "Auto"
         else f"{mode} · {settings.effective_question_difficulty}"
     )
+    if settings.usage_mode == "byo":
+        usage_pill = "Usage · Personal API key"
+    else:
+        usage_pill = "Usage · Demo"
     parts = [
         '<div class="ia-config-card" aria-label="Current setup summary">',
         '<div class="ia-config-card-header">Current Setup</div>',
         '<div class="ia-config-chips">',
+        _pill(usage_pill),
         _pill(settings.role_category),
         _pill(settings.role_title or "Role title"),
         _pill(settings.seniority),
