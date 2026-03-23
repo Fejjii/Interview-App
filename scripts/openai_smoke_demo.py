@@ -20,6 +20,7 @@ def main() -> None:
         user_prompt="Reply with exactly: ok",
         max_tokens=10,
         temperature=0.0,
+        llm_route="openai_smoke_demo",
     )
     print("LLM_SMOKE_RESPONSE_TEXT", (resp.text or "").strip())
     print("LLM_SMOKE_MODEL", resp.model)

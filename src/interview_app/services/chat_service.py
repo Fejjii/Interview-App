@@ -15,7 +15,8 @@ from typing import Any
 from interview_app.app.ui_settings import UISettings
 from interview_app.llm.model_settings import get_model_config
 from interview_app.llm.openai_client import LLMClient
-from interview_app.security.pipeline import run_input_pipeline
+from interview_app.security.guards import protect_system_prompt
+from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
 from interview_app.services.answer_evaluator import evaluate_answer
 from interview_app.services.interview_generator import generate_questions
 from interview_app.utils.errors import safe_user_message
@@ -137,6 +138,7 @@ def _generate_next_question(
         difficulty=settings.effective_question_difficulty,
         persona=settings.persona,
         session_state=session_state,
+        skip_session_rate_limit=True,
     )
 
     if not result.ok or result.response is None:
@@ -148,7 +150,7 @@ def _generate_next_question(
     text = (result.response.text or "").strip()
     # Extract first question if model returned a list
     if text:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         for line in lines:
             if line[0:1].isdigit() and (")" in line or "." in line):
                 idx = line.find(")") if ")" in line else line.find(".")
@@ -326,6 +328,7 @@ def _answer_general_question(
         "(not an interview answer). Reply helpfully and briefly in a conversational tone, then invite them to continue "
         f"the practice interview for their **{role}** target role when they're ready. Keep the reply under 140 words."
     )
+    system_prompt = protect_system_prompt(system)
     try:
         cfg = get_model_config(settings.model_preset)
         client = LLMClient(
@@ -336,15 +339,25 @@ def _answer_general_question(
         )
         extra = [{"role": m.role, "content": m.content} for m in messages[:-1]][-6:]
         resp = client.generate_response(
-            system_prompt=system,
+            system_prompt=system_prompt,
             user_prompt=last_user_content,
             model=cfg.name,
             temperature=min(0.7, settings.temperature + 0.2),
             max_tokens=min(400, settings.max_tokens),
             top_p=settings.top_p,
             extra_messages=extra if extra else None,
+            llm_route="chat_conversational",
         )
-        text = (resp.text or "").strip() or "I'm here to help. When you're ready, we can continue with the interview practice."
+        out = run_output_pipeline(resp.text, service="chat_service")
+        if not out.safe:
+            return ChatTurnResult(
+                assistant_message=out.reason
+                or "The response could not be shown. Please try again or continue with your interview practice.",
+                evaluation=None,
+            )
+        text = (out.text or "").strip() or (
+            "I'm here to help. When you're ready, we can continue with the interview practice."
+        )
         return ChatTurnResult(assistant_message=text, evaluation=None)
     except Exception as exc:
         return ChatTurnResult(
@@ -385,6 +398,7 @@ def _evaluate_and_follow_up(
         response_language=settings.response_language,
         persona=settings.persona,
         session_state=session_state,
+        skip_session_rate_limit=True,
     )
 
     if not eval_result.ok or eval_result.response is None:

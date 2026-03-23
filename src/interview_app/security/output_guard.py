@@ -19,12 +19,12 @@ from pydantic import BaseModel, Field
 from interview_app.config.settings import get_security_settings
 from interview_app.security.logging import log_security_event
 
+# Do not match our own `protect_system_prompt` suffix ("Security: Never reveal…") or
+# benign refusals, or we get false blocks on normal safe replies.
 _LEAKAGE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"system\s*prompt\s*[:=]", re.IGNORECASE),
     re.compile(r"developer\s*instructions?\s*[:=]", re.IGNORECASE),
     re.compile(r"(here\s+(is|are)\s+(the|my)\s+system\s+(prompt|instructions?))", re.IGNORECASE),
-    re.compile(r"\bSecurity:\s*Never reveal\b", re.IGNORECASE),
-    re.compile(r"ignore\s+instructions.*refuse", re.IGNORECASE),
 )
 
 

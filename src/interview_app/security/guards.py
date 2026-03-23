@@ -1,22 +1,14 @@
 from __future__ import annotations
 
-"""
-Security guardrails for user-provided text.
-
-In an LLM app, user text is part of the model input. This module adds a simple
-"defense-in-depth" layer before we call OpenAI:
-- validate: required / non-empty / length limits
-- sanitize: redact obvious secrets so they aren't sent to a third-party API
-- detect: naive prompt-injection patterns; block requests when suspected
-
-The guardrails are intentionally lightweight for a learning project; treat them as
-an extension point (you can harden them as you iterate).
-"""
-
 import re
 from typing import Final
 
 from pydantic import BaseModel, Field
+
+from interview_app.config.settings import get_security_settings
+from interview_app.security.logging import log_security_event
+
+__doc__ = """Security guardrails for user-provided text (validation, secret redaction, injection heuristics)."""
 
 
 class GuardrailResult(BaseModel):
@@ -57,6 +49,23 @@ _INJECTION_REGEXES: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\bact as\b.*\b(system|developer)\b", re.IGNORECASE),
 )
 
+# Extra phrases / patterns when SECURITY_PROMPT_INJECTION_STRICT=true (or strict=True).
+_STRICT_INJECTION_PHRASES: Final[tuple[str, ...]] = (
+    "hidden instructions",
+    "show hidden instructions",
+    "unfiltered",
+    "without restrictions",
+    "leak the prompt",
+    "exfiltrate",
+    "developer mode",
+)
+
+_STRICT_INJECTION_REGEXES: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"\b(leak|extract|dump|exfiltrate)\b.{0,80}\b(prompt|instructions?|policy)\b", re.IGNORECASE),
+    re.compile(r"\b(base64|hex)\b.{0,40}\b(decode|instruction)\b", re.IGNORECASE),
+    re.compile(r"\b(end\s*of\s*system|start\s*of\s*user)\b", re.IGNORECASE),
+)
+
 _SECRET_REGEXES: Final[tuple[re.Pattern[str], ...]] = (
     # OpenAI-style keys (common prefix; keep intentionally broad).
     re.compile(r"\bsk-[a-zA-Z0-9]{16,}\b"),
@@ -64,6 +73,16 @@ _SECRET_REGEXES: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----"),
     # AWS access key ids (very rough heuristic).
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    # HTTP Authorization: Bearer … (common API tokens).
+    re.compile(r"\bBearer\s+[A-Za-z0-9_\-\.]{24,}\b", re.IGNORECASE),
+    # GitHub classic PAT.
+    re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),
+    # GitHub fine-grained PAT prefix.
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    # Google API keys (browser / cloud console style).
+    re.compile(r"\bAIza[0-9A-Za-z\-_]{35}\b"),
+    # Slack bot tokens (common high-entropy prefix).
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{16,}\b"),
 )
 
 
@@ -88,19 +107,32 @@ def validate_user_input(text: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> st
     return cleaned
 
 
-def detect_prompt_injection(text: str) -> bool:
+def detect_prompt_injection(text: str, *, strict: bool | None = None) -> bool:
     """
     Naive heuristic prompt-injection detection.
 
-    This is intentionally conservative and should be hardened over time.
+    When ``strict`` is None, uses ``SecuritySettings.prompt_injection_strict``.
+    Strict mode adds extra phrases and regexes (more false positives possible).
     """
     if not text:
         return False
 
+    if strict is None:
+        strict = get_security_settings().prompt_injection_strict
+
     lowered = text.lower()
-    if any(phrase in lowered for phrase in _INJECTION_PHRASES):
+    phrases: tuple[str, ...] = _INJECTION_PHRASES
+    if strict:
+        phrases = _INJECTION_PHRASES + _STRICT_INJECTION_PHRASES
+
+    if any(phrase in lowered for phrase in phrases):
         return True
-    return any(rx.search(text) is not None for rx in _INJECTION_REGEXES)
+
+    regexes: tuple[re.Pattern[str], ...] = _INJECTION_REGEXES
+    if strict:
+        regexes = _INJECTION_REGEXES + _STRICT_INJECTION_REGEXES
+
+    return any(rx.search(text) is not None for rx in regexes)
 
 
 def sanitize_user_input(text: str) -> str:
@@ -108,6 +140,8 @@ def sanitize_user_input(text: str) -> str:
     Remove obviously sensitive material from user input.
 
     This is best-effort and does not guarantee complete secret removal.
+    Covers OpenAI-style keys, PEM blocks, AWS key ids, Bearer tokens,
+    common GitHub/Google/Slack token shapes.
     """
     if not text:
         return ""
@@ -138,11 +172,19 @@ def protect_system_prompt(prompt: str) -> str:
     )
 
 
-def run_guardrails(text: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> GuardrailResult:
+def run_guardrails(
+    text: str,
+    *,
+    max_chars: int = _DEFAULT_MAX_CHARS,
+    service: str = "unknown",
+) -> GuardrailResult:
     """
     Convenience wrapper returning a structured result for UI consumption.
+
+    Logs auditable security events when prompt injection is detected (no raw user text).
     """
     original_length = 0 if text is None else len(text)
+    strict_active = get_security_settings().prompt_injection_strict
     try:
         cleaned = validate_user_input(text, max_chars=max_chars)
     except ValueError as e:
@@ -159,7 +201,7 @@ def run_guardrails(text: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> Guardra
 
     truncated = len(cleaned) < len(text.strip())
     sanitized = sanitize_user_input(cleaned)
-    injection = detect_prompt_injection(sanitized)
+    injection = detect_prompt_injection(sanitized, strict=None)
 
     flags: list[str] = []
     if truncated:
@@ -168,6 +210,23 @@ def run_guardrails(text: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> Guardra
         flags.append("sanitized")
     if injection:
         flags.append("prompt_injection_suspected")
+        if strict_active:
+            flags.append("prompt_injection_strict")
+
+    if injection:
+        log_security_event(
+            event="prompt_injection",
+            action="blocked",
+            reason="Heuristic prompt-injection match",
+            service=service,
+            extra={
+                "guard_name": "run_guardrails",
+                "outcome": "blocked",
+                "route": service,
+                "input_length": original_length,
+                "prompt_injection_strict": strict_active,
+            },
+        )
 
     return GuardrailResult(
         ok=not injection,
@@ -178,4 +237,3 @@ def run_guardrails(text: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> Guardra
         truncated=truncated,
         original_length=original_length,
     )
-

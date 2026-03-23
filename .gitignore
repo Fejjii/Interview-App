@@ -6,13 +6,28 @@ __pycache__/
 build/
 dist/
 
+# OS / editor
+.DS_Store
+Thumbs.db
+
 # secrets
 .env
+.env.local
+*.local
 
-# debug session logs
+# logs
+*.log
 debug-*.log
 **/debug-*.log
 
+# evaluation / experiment outputs
+evaluation/results/
+
 # local session / app data (do not commit)
 data/
+
+# temp / debug artifacts
+tmp/
+temp/
+*.tmp
 

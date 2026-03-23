@@ -11,7 +11,11 @@ consistently in a single call:
         2. Secret redaction
         3. Prompt injection detection
         4. Content moderation
-        5. Rate limiting
+        5. Rate limiting (one increment per ``run_input_pipeline`` call with
+           ``check_rate=True`` and a non-None ``session_state``; chat turns
+           typically consume one unit at the top-level message check, and may
+           pass ``skip_session_rate_limit`` to nested services to avoid
+           double-counting)
 
     Output pipeline (after LLM):
         6. Output validation (empty check, length, leakage, optional JSON)
@@ -71,7 +75,7 @@ def run_input_pipeline(
     flags: list[str] = []
 
     # 1-3. Validation + sanitization + secret redaction + injection detection
-    guardrail = run_guardrails(text, max_chars=limit)
+    guardrail = run_guardrails(text, max_chars=limit, service=service)
     flags.extend(guardrail.flags)
 
     if not guardrail.ok:

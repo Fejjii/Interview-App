@@ -59,11 +59,15 @@ def generate_questions(
     difficulty: str = "Medium",
     persona: str = "Hiring Manager",
     session_state: dict[str, Any] | None = None,
+    skip_session_rate_limit: bool = False,
 ) -> GenerateQuestionsResult:
     """
     Generate interview questions using a selected prompt strategy.
 
     This is the main "happy path" service used by the Streamlit UI.
+
+    When ``skip_session_rate_limit`` is True, the session rate-limit step is skipped for
+    this service (e.g. chat already consumed one unit for the same user-visible turn).
     """
 
     guards: dict[str, GuardrailResult] = {}
@@ -84,7 +88,7 @@ def generate_questions(
         field_name="role_title",
         max_chars=200,
         session_state=session_state,
-        check_rate=True,
+        check_rate=not skip_session_rate_limit,
         service=_SERVICE_NAME,
     )
     if role_pipe.guardrail:
@@ -147,6 +151,7 @@ def generate_questions(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            llm_route=_SERVICE_NAME,
         )
     except Exception as exc:
         return GenerateQuestionsResult(

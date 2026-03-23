@@ -22,6 +22,7 @@ def test_llm_client_generate_response_smoke() -> None:
     """Make a minimal API call and assert we got *some* text back."""
     client = LLMClient()
     resp = client.generate_response(
+        llm_route="integration_smoke",
         system_prompt="You are a helpful assistant.",
         user_prompt="Reply with exactly: ok",
         max_tokens=10,

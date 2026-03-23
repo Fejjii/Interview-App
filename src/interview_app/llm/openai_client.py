@@ -1,17 +1,7 @@
 from __future__ import annotations
 
-"""
-OpenAI API wrapper (LLM client).
-
-The rest of the app should not need to know about:
-- how to initialize the OpenAI SDK
-- how to assemble `{role, content}` messages
-- how to parse responses and usage metadata
-
-This module provides a small `LLMClient` surface:
-`generate_response(system_prompt=..., user_prompt=..., ...) -> LLMResponse`
-"""
-
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,6 +10,15 @@ from openai import OpenAI
 from interview_app.config.settings import Settings, get_settings
 from interview_app.llm.model_settings import MODEL_PRESETS, ModelConfig, is_model_preset_key
 from interview_app.utils.types import LLMResponse, LLMUsage
+
+__doc__ = """OpenAI API wrapper (LLM client).
+
+The rest of the app should not need to know about OpenAI SDK details. This module
+provides `LLMClient.generate_response(...) -> LLMResponse`. Each call emits a
+lightweight structured audit log (no prompt bodies, no PII).
+"""
+
+logger = logging.getLogger("interview_app.llm")
 
 
 @dataclass(frozen=True)
@@ -30,6 +29,36 @@ class ClientParams:
     temperature: float
     top_p: float | None
     max_tokens: int | None
+
+
+def _log_llm_audit(
+    *,
+    llm_route: str | None,
+    model: str,
+    success: bool,
+    latency_ms: float,
+    usage: LLMUsage | None,
+    error_type: str | None = None,
+) -> None:
+    """Structured boundary log: model, tokens, latency, outcome. Never logs prompt text."""
+    entry: dict[str, Any] = {
+        "event": "llm_call",
+        "route": llm_route or "unknown",
+        "model": model,
+        "success": success,
+        "latency_ms": round(latency_ms, 2),
+    }
+    if usage is not None:
+        entry["prompt_tokens"] = usage.prompt_tokens
+        entry["completion_tokens"] = usage.completion_tokens
+        entry["total_tokens"] = usage.total_tokens
+    if error_type:
+        entry["error_type"] = error_type
+
+    if success:
+        logger.info("LLM %s", entry)
+    else:
+        logger.warning("LLM %s", entry)
 
 
 class LLMClient:
@@ -94,14 +123,16 @@ class LLMClient:
         top_p: float | None = None,
         max_tokens: int | None = None,
         extra_messages: list[dict[str, Any]] | None = None,
+        llm_route: str | None = None,
     ) -> LLMResponse:
         """
         Generate a single assistant response from system + user prompts.
 
         `extra_messages` can be used to pass additional chat turns in OpenAI's
         `{role, content}` shape, e.g. prior user/assistant messages.
-        """
 
+        `llm_route` identifies the call site for audit logs (e.g. ``interview_generator``).
+        """
         resolved = ClientParams(
             model=model or self._defaults.model,
             temperature=temperature if temperature is not None else self._defaults.temperature,
@@ -117,16 +148,30 @@ class LLMClient:
             # Insert extra messages between system and the final user prompt.
             messages = messages[:-1] + extra_messages + messages[-1:]
 
-        # Single-shot Chat Completions call (kept intentionally simple for this project).
-        resp = self._client.chat.completions.create(
-            model=resolved.model,
-            messages=messages,
-            temperature=resolved.temperature,
-            top_p=resolved.top_p,
-            max_tokens=resolved.max_tokens,
-            timeout=self._timeout_s,
-        )
+        t0 = time.monotonic()
+        try:
+            # Single-shot Chat Completions call (kept intentionally simple for this project).
+            resp = self._client.chat.completions.create(
+                model=resolved.model,
+                messages=messages,
+                temperature=resolved.temperature,
+                top_p=resolved.top_p,
+                max_tokens=resolved.max_tokens,
+                timeout=self._timeout_s,
+            )
+        except Exception as exc:
+            latency_ms = (time.monotonic() - t0) * 1000.0
+            _log_llm_audit(
+                llm_route=llm_route,
+                model=resolved.model,
+                success=False,
+                latency_ms=latency_ms,
+                usage=None,
+                error_type=type(exc).__name__,
+            )
+            raise
 
+        latency_ms = (time.monotonic() - t0) * 1000.0
         text = (resp.choices[0].message.content or "").strip() if resp.choices else ""
         usage = (
             LLMUsage(
@@ -138,10 +183,17 @@ class LLMClient:
             else None
         )
 
+        _log_llm_audit(
+            llm_route=llm_route,
+            model=getattr(resp, "model", resolved.model),
+            success=True,
+            latency_ms=latency_ms,
+            usage=usage,
+        )
+
         return LLMResponse(
             text=text,
             model=getattr(resp, "model", resolved.model),
             usage=usage,
             raw_response_id=getattr(resp, "id", None),
         )
-

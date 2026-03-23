@@ -55,10 +55,14 @@ def evaluate_answer(
     response_language: str = "en",
     persona: str = "Hiring Manager",
     session_state: dict[str, Any] | None = None,
+    skip_session_rate_limit: bool = False,
 ) -> EvaluateAnswerResult:
     """
     Evaluate a user's answer to an interview question.
     Returns structured EvaluationResult when parsing succeeds.
+
+    When ``skip_session_rate_limit`` is True, the session rate-limit step is skipped for
+    pipeline fields inside this service (e.g. chat already consumed one unit for the turn).
     """
 
     guards: dict[str, GuardrailResult] = {}
@@ -102,7 +106,7 @@ def evaluate_answer(
         field_name="question",
         max_chars=4000,
         session_state=session_state,
-        check_rate=True,
+        check_rate=not skip_session_rate_limit,
         service=_SERVICE_NAME,
     )
     if q_pipe.guardrail:
@@ -192,6 +196,7 @@ def evaluate_answer(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            llm_route=_SERVICE_NAME,
         )
     except Exception as exc:
         return EvaluateAnswerResult(

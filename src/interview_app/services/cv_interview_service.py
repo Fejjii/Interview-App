@@ -372,6 +372,7 @@ def run_cv_interview_pipeline(
                 top_p=top_p,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                llm_route="cv_extraction",
             )
         except Exception as exc:
             return CVInterviewServiceResult(
@@ -540,6 +541,7 @@ def run_cv_interview_pipeline(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            llm_route="cv_interview_generation",
         )
     except Exception as exc:
         return CVInterviewServiceResult(
@@ -819,6 +821,7 @@ def run_cv_practice_evaluation(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            llm_route="cv_practice_evaluation",
         )
     except Exception as exc:
         return CVPracticeEvaluationServiceResult(
