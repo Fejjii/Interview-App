@@ -24,10 +24,11 @@ from interview_app.app.conversation_state import (
 )
 from interview_app.app.interview_form_config import validate_role_title
 from interview_app.app.ui_settings import (
-    COMPARE_PROMPT_STRATEGY_KEYS,
+    PROMPT_STRATEGY_OPTIONS,
     WORKSPACE_TAB_LABELS,
     UISettings,
     label_for_prompt_strategy,
+    prompt_strategy_key_from_label,
 )
 from interview_app.cv.models import (
     CVAnalysisBundle,
@@ -56,6 +57,10 @@ from interview_app.ui.display import (
     show_llm_response,
     show_prompt_debug,
     show_settings_debug,
+)
+from interview_app.ui.strategy_comparison import (
+    render_comparison_results,
+    render_evaluation_section,
 )
 from interview_app.ui.theme import render_configuration_pill_bar
 from interview_app.ui.widgets import (
@@ -329,70 +334,141 @@ def _render_question_generation_tab(settings: UISettings) -> None:
             st.session_state.ia_pending_generate = True
             st.rerun()
 
-    if st.button(
-        "Compare Prompt Strategies",
-        use_container_width=True,
-        key="btn_compare_strategies",
-        help="Runs one question each for zero-shot, few-shot, and chain-of-thought with your current setup.",
-    ):
-        ok_title, _ = validate_role_title(settings.role_title)
-        if not ok_title:
-            st.warning("Set a **role title** in the sidebar.")
-        else:
-            jd = settings.job_description or ""
-            if st.session_state.get("response_language") is None and jd.strip():
-                st.session_state.response_language = detect_language(jd)
-            resolved_lang = st.session_state.get("response_language") or DEFAULT_LANGUAGE
-            rows: list[dict[str, Any]] = []
-            with st.spinner("Comparing strategies…"):
-                for idx, strat in enumerate(COMPARE_PROMPT_STRATEGY_KEYS):
-                    try:
-                        gen_result = generate_questions_from_settings(
-                            settings=settings,
-                            prompt_strategy=strat,
-                            n_questions=1,
-                            session_state=dict(st.session_state),
-                            skip_session_rate_limit=(idx > 0),
-                            response_language=resolved_lang,
-                        )
-                    except Exception as exc:
-                        rows.append(
-                            {
-                                "label": label_for_prompt_strategy(strat),
-                                "ok": False,
-                                "text": "",
-                                "error": safe_user_message(exc),
-                            }
-                        )
-                        continue
-                    text = ""
-                    if gen_result.ok and gen_result.response is not None:
-                        text = (gen_result.response.text or "").strip()
-                    rows.append(
-                        {
-                            "label": label_for_prompt_strategy(strat),
-                            "ok": bool(gen_result.ok and text),
-                            "text": text,
-                            "error": (gen_result.error or "")
-                            if not gen_result.ok
-                            else "",
-                        }
-                    )
-            st.session_state.ia_compare_results = rows
+    _strategy_labels = [lbl for lbl, _ in PROMPT_STRATEGY_OPTIONS]
+    with st.container(border=True):
+        st.markdown("### Strategy Comparison")
+        st.caption("Select strategies to compare")
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            st.selectbox(
+                "Strategy A",
+                options=_strategy_labels,
+                index=0,
+                key="ia_compare_sel_a",
+            )
+        with sc2:
+            st.selectbox(
+                "Strategy B",
+                options=_strategy_labels,
+                index=min(1, len(_strategy_labels) - 1),
+                key="ia_compare_sel_b",
+            )
 
-    cmp_rows = st.session_state.get("ia_compare_results")
-    if cmp_rows:
-        st.markdown("##### Strategy comparison")
-        st.caption("Same sidebar setup; three prompting techniques side by side.")
-        cols = st.columns(len(cmp_rows))
-        for col, row in zip(cols, cmp_rows):
-            with col:
-                with st.container(border=True):
-                    st.markdown(f"**Strategy: {row['label']}**")
-                    if row.get("ok") and row.get("text"):
-                        st.markdown(row["text"])
-                    else:
-                        st.warning(row.get("error") or row.get("text") or "Generation failed.")
+        if st.button(
+            "Compare Selected Strategies",
+            use_container_width=True,
+            key="btn_compare_selected_strategies",
+            help="Compares two strategies using your current sidebar setup and number of questions.",
+        ):
+            ok_title, _ = validate_role_title(settings.role_title)
+            if not ok_title:
+                st.warning("Set a **role title** in the sidebar.")
+            else:
+                la = str(st.session_state.get("ia_compare_sel_a", _strategy_labels[0]))
+                lb = str(st.session_state.get("ia_compare_sel_b", _strategy_labels[1]))
+                ka = prompt_strategy_key_from_label(la)
+                kb = prompt_strategy_key_from_label(lb)
+                if ka == kb:
+                    st.warning("Choose two **different** strategies to compare.")
+                else:
+                    jd = settings.job_description or ""
+                    if st.session_state.get("response_language") is None and jd.strip():
+                        st.session_state.response_language = detect_language(jd)
+                    resolved_lang = st.session_state.get("response_language") or DEFAULT_LANGUAGE
+                    nq = int(st.session_state.get("ia_n_questions", 5))
+                    err_a = ""
+                    err_b = ""
+                    with st.spinner("Comparing strategies…"):
+                        try:
+                            gen_a = generate_questions_from_settings(
+                                settings=settings,
+                                prompt_strategy=ka,
+                                n_questions=nq,
+                                session_state=dict(st.session_state),
+                                skip_session_rate_limit=False,
+                                response_language=resolved_lang,
+                            )
+                        except Exception as exc:
+                            gen_a = None
+                            err_a = safe_user_message(exc)
+                        else:
+                            err_a = ""
+                        try:
+                            gen_b = generate_questions_from_settings(
+                                settings=settings,
+                                prompt_strategy=kb,
+                                n_questions=nq,
+                                session_state=dict(st.session_state),
+                                skip_session_rate_limit=True,
+                                response_language=resolved_lang,
+                            )
+                        except Exception as exc:
+                            gen_b = None
+                            err_b = safe_user_message(exc)
+                        else:
+                            err_b = ""
+
+                        text_a = ""
+                        text_b = ""
+                        ok_a = False
+                        ok_b = False
+                        if gen_a is not None:
+                            ok_a = bool(
+                                gen_a.ok
+                                and gen_a.response
+                                and (gen_a.response.text or "").strip()
+                            )
+                            if gen_a.ok and gen_a.response:
+                                text_a = (gen_a.response.text or "").strip()
+                            elif not gen_a.ok:
+                                err_a = gen_a.error or err_a or "Generation failed."
+                        if gen_b is not None:
+                            ok_b = bool(
+                                gen_b.ok
+                                and gen_b.response
+                                and (gen_b.response.text or "").strip()
+                            )
+                            if gen_b.ok and gen_b.response:
+                                text_b = (gen_b.response.text or "").strip()
+                            elif not gen_b.ok:
+                                err_b = gen_b.error or err_b or "Generation failed."
+
+                        st.session_state.ia_compare_pair = {
+                            "a_key": ka,
+                            "b_key": kb,
+                            "label_a": la,
+                            "label_b": lb,
+                            "text_a": text_a,
+                            "text_b": text_b,
+                            "ok_a": ok_a,
+                            "ok_b": ok_b,
+                            "err_a": err_a,
+                            "err_b": err_b,
+                        }
+
+    pair = st.session_state.get("ia_compare_pair")
+    if isinstance(pair, dict) and pair:
+        with st.container(border=True):
+            render_comparison_results(
+                label_a=str(pair["label_a"]),
+                label_b=str(pair["label_b"]),
+                key_a=str(pair["a_key"]),
+                key_b=str(pair["b_key"]),
+                text_a=str(pair.get("text_a", "")),
+                text_b=str(pair.get("text_b", "")),
+                ok_a=bool(pair.get("ok_a")),
+                ok_b=bool(pair.get("ok_b")),
+                err_a=str(pair.get("err_a", "")),
+                err_b=str(pair.get("err_b", "")),
+            )
+        with st.container(border=True):
+            render_evaluation_section(
+                settings=settings,
+                key_a=str(pair["a_key"]),
+                key_b=str(pair["b_key"]),
+                label_a=str(pair["label_a"]),
+                label_b=str(pair["label_b"]),
+            )
 
     if settings.show_debug:
         nq = int(st.session_state.get("ia_n_questions", 5))

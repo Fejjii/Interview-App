@@ -19,6 +19,7 @@ from interview_app.cv.models import (
     CVPracticeEvaluationBatch,
 )
 from interview_app.security.guards import GuardrailResult
+from interview_app.utils.interview_question_output import try_parse_questions_json
 from interview_app.utils.types import EvaluationResult, LLMResponse
 
 
@@ -38,19 +39,46 @@ def show_generated_questions_output(
     )
 
     text = (response.text or "").strip()
-    main_q, follow_ups = _split_first_numbered_question(text)
+    parsed = try_parse_questions_json(text)
 
     st.markdown("---")
-    st.markdown("**Primary questions**")
-    if main_q:
-        st.success(main_q)
+    if parsed:
+        st.markdown("**Generated questions (structured JSON)**")
+        for i, item in enumerate(parsed, start=1):
+            q = str(item.get("question", "")).strip()
+            skill = str(item.get("skill_tested", "")).strip()
+            diff = str(item.get("difficulty", "")).strip()
+            why = str(item.get("why_it_matters", "")).strip()
+            title = q[:90] + ("…" if len(q) > 90 else "")
+            with st.expander(f"{i}. {title or 'Question'}", expanded=(i == 1)):
+                st.markdown(q or "_Missing question text._")
+                meta_parts = []
+                if skill:
+                    meta_parts.append(f"**Skill tested:** {skill}")
+                if diff:
+                    meta_parts.append(f"**Difficulty:** {diff}")
+                if why:
+                    meta_parts.append(f"**Why it matters:** {why}")
+                if meta_parts:
+                    st.caption(" · ".join(meta_parts))
+    elif settings.prompt_strategy == "structured_output" and text:
+        st.warning(
+            "Structured output was selected, but the model response was not valid JSON. "
+            "Showing raw text below."
+        )
+        st.code(text, language="json")
     else:
-        st.markdown(text or "_No text returned._")
+        main_q, follow_ups = _split_first_numbered_question(text)
+        st.markdown("**Primary questions**")
+        if main_q:
+            st.success(main_q)
+        else:
+            st.markdown(text or "_No text returned._")
 
-    if follow_ups:
-        st.markdown("**Additional questions**")
-        for i, line in enumerate(follow_ups, start=2):
-            st.markdown(f"{i}. {line}")
+        if follow_ups:
+            st.markdown("**Additional questions**")
+            for i, line in enumerate(follow_ups, start=2):
+                st.markdown(f"{i}. {line}")
 
     st.markdown("**What interviewers often look for**")
     st.info(

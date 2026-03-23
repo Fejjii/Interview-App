@@ -38,23 +38,23 @@ For diagrams and module boundaries, see **[docs/architecture.md](docs/architectu
 
 ## Prompt Strategies
 
-The app ships with **five** composable prompting techniques for **interview question generation** (templates under `src/interview_app/prompts/templates/`). You pick one in the sidebar under **Prompt Strategy**:
+The app ships with **five** composable prompting techniques for **interview question generation**. Implementation details live in `src/interview_app/prompts/prompt_strategies.py`, templates in `src/interview_app/prompts/templates/`, and focus-aligned few-shot demonstrations in `src/interview_app/prompts/few_shot_examples.py`. You pick one in the sidebar under **Prompt Strategy**:
 
-| Strategy | What it does |
-|----------|----------------|
-| **Zero-shot** | Direct instructions only—no examples in the user prompt. |
-| **Few-shot** | Includes example questions so the model matches style and depth. |
-| **Chain-of-thought** | Asks the model to reason step-by-step internally (final output stays interview questions). |
-| **Structured Output** | Requests machine-readable JSON matching a schema (good for strict parsing). |
-| **Role-based** | Emphasizes a consistent interviewer persona together with your chosen persona tone. |
+| Strategy | What it means in this app | What you should see |
+|----------|---------------------------|---------------------|
+| **Zero-shot** | User prompt is **direct instructions only** (numbered list). System prompt states the technique and **does not** inject persona calibration—persona appears only as one line of context in the user prompt. | Straight, standard questions with minimal prompting machinery. |
+| **Few-shot** | **Three demonstration questions** are injected per **interview focus** (from `few_shot_examples.py`), plus a scenario line using your role, seniority, and round—then a separate “generate new questions” task. | Questions that follow the **pattern and depth** of the demonstrations without copying them. |
+| **Chain-of-thought** | **Internal** reasoning steps (priorities, competencies, seniority/round fit, question plan) are specified in the **system** prompt; the user prompt is scenario + “numbered list only” so reasoning is not echoed. | Often more targeted, competency-aligned questions; output should still be **only** questions. |
+| **Structured Output** | Model must return **valid JSON** with a `questions` array; each item has `question`, `skill_tested`, `difficulty`, `why_it_matters`. The Interview Questions tab renders these fields in expanders; invalid JSON falls back to a raw view with a warning. | Schema-shaped output with metadata per question. |
+| **Role-based** | **Strong interviewer assignment** in the user prompt (`persona_identity` + full `persona_behavior` text from `personas.py`) and instructions to sound like a live interviewer. | Tone and framing driven by persona + role (vs. neutral zero-shot). |
 
 The **Current Setup** strip at the top of the workspace shows the active strategy (e.g. `Prompt · Few-shot`). The **Interview Questions** tab also shows **Active prompt strategy** above the controls.
 
 ### Strategy comparison
 
-On the **Interview Questions** tab, **Compare Prompt Strategies** runs the same sidebar configuration **three** times—**zero-shot**, **few-shot**, and **chain-of-thought**—generating **one** question per strategy. Results appear in **three bordered columns** so you can compare wording and format. (Structured Output and Role-based are selectable for normal generation but are not included in this quick comparison to limit API calls.)
+On the **Interview Questions** tab, **Strategy Comparison** lets you pick **Strategy A** and **Strategy B** from the same five techniques, then **Compare Selected Strategies**. The app uses your current sidebar setup and **Number of questions** to generate both runs, then shows results **side by side** in aligned rows (Question 1 vs Question 1, etc.). Structured Output rows include optional captions for skill, difficulty, and “why it matters” when JSON parses cleanly. Below that, **Evaluate the strategies** offers sliders (realism, difficulty match, overall quality), a **Winner** choice, and **Save evaluation**—appended to `data/strategy_comparison_evaluations.json` for local review.
 
-**Note:** Answer feedback and the CV prep pipeline use their own fixed system prompts; only the job-description-based question generator and mock-interview **question** turns follow the selected strategy.
+**Note:** Answer feedback and the CV prep pipeline use their own fixed system prompts; only the job-description-based question generator and mock-interview **question** turns follow the selected strategy. If **Structured Output** is selected for mock interview, the chat extracts the **first** `question` field from valid JSON for a single spoken prompt.
 
 ---
 

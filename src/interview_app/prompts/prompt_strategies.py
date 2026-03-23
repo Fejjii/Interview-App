@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from interview_app.prompts.few_shot_examples import build_few_shot_demonstration_block
 from interview_app.prompts.personas import get_persona_prompt
 from interview_app.prompts.prompt_templates import load_template_text
 from interview_app.utils.language import language_instruction
@@ -53,7 +54,10 @@ def build_zero_shot_prompt(
         persona=persona,
     )
     system_prompt = _system_prompt_for(
-        "zero_shot", response_language=response_language, persona=persona
+        "zero_shot",
+        response_language=response_language,
+        persona=persona,
+        include_persona=False,
     )
     return PromptBuildResult(
         system_prompt=system_prompt, user_prompt=user_prompt, template_name="zero_shot"
@@ -75,6 +79,13 @@ def build_few_shot_prompt(
 ) -> PromptBuildResult:
     """Build a prompt that includes examples (few-shot) to steer format/quality."""
     template = load_template_text("few_shot")
+    few_shot_demonstrations = build_few_shot_demonstration_block(
+        role_category=role_category,
+        role_title=role_title,
+        seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
+    )
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -86,6 +97,7 @@ def build_few_shot_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        few_shot_demonstrations=few_shot_demonstrations,
     )
     system_prompt = _system_prompt_for(
         "few_shot", response_language=response_language, persona=persona
@@ -188,6 +200,14 @@ def build_role_based_prompt(
 ) -> PromptBuildResult:
     """Build a prompt that sets a strong interviewer persona (role-based prompting)."""
     template = load_template_text("role_based")
+    persona_identity = _role_based_identity_line(
+        persona=persona,
+        role_title=role_title,
+        seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
+    )
+    persona_behavior = get_persona_prompt(persona)
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -199,6 +219,8 @@ def build_role_based_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        persona_identity=persona_identity,
+        persona_behavior=persona_behavior,
     )
     system_prompt = _system_prompt_for(
         "role_based", response_language=response_language, persona=persona
@@ -208,15 +230,33 @@ def build_role_based_prompt(
     )
 
 
+def _role_based_identity_line(
+    *,
+    persona: str,
+    role_title: str,
+    seniority: str,
+    interview_round: str,
+    interview_focus: str,
+) -> str:
+    """Strong interviewer anchor for role-based prompting (user prompt body)."""
+    return (
+        f"You are **{persona}** conducting the **{interview_round}** for a candidate "
+        f"targeting **{role_title}** ({seniority}). "
+        f"This round should stress **{interview_focus}**. "
+        "Stay in character: your questions should sound like a real interviewer, not a study guide."
+    )
+
+
 def _system_prompt_for(
     strategy: str,
     *,
     response_language: str = "en",
     persona: str = "Hiring Manager",
+    include_persona: bool = True,
 ) -> str:
     """
     Return a distinct system prompt per technique.
-    Appends persona tone and language instruction.
+    Appends persona tone (except zero-shot) and language instruction.
     """
 
     base = (
@@ -227,27 +267,41 @@ def _system_prompt_for(
 
     match strategy:
         case "zero_shot":
-            tech = "Technique: Zero-shot. Use direct instructions; do not add extra commentary."
+            tech = (
+                "Technique: Zero-shot. Direct instructions only in the user message—no separate "
+                "worked examples, no chain-of-thought in the reply. Output only the requested questions."
+            )
         case "few_shot":
-            tech = "Technique: Few-shot. Use the provided examples as a style and depth guide."
+            tech = (
+                "Technique: Few-shot. Treat the provided demonstrations as pattern, depth, and tone "
+                "guides. Generate **new** questions in the same style; do not copy or lightly paraphrase them."
+            )
         case "chain_of_thought":
             tech = (
-                "Technique: Chain-of-thought (private). Think step-by-step internally, "
-                "but do not reveal hidden reasoning—output only the final questions."
+                "Technique: Chain-of-thought (internal only). Before writing anything visible, privately "
+                "work through—in order—(1) role priorities implied by the role title, seniority, and job "
+                "description, (2) key competencies to test for the stated interview focus and round, "
+                "(3) appropriate depth for seniority and round, (4) a brief plan for the requested number "
+                "of questions. Then output **only** a numbered list of interview questions. Do not output "
+                "steps, labels, analysis, or chain-of-thought text."
             )
         case "structured_output":
             tech = (
-                "Technique: Structured output. Return valid JSON exactly matching the requested schema. "
-                "No markdown, no extra keys, no trailing commentary."
+                "Technique: Structured output. Return **valid JSON only**, exactly matching the schema "
+                "in the user message. No markdown fences, no prose before or after the JSON."
             )
         case "role_based":
-            tech = "Technique: Role-based. Maintain a consistent interviewer persona and tone."
+            tech = (
+                "Technique: Role-based prompting. The user message defines a concrete interviewer "
+                "identity and behavior—honor it consistently in every line you output."
+            )
         case _:
             tech = ""
 
     prompt = f"{base}\n\n{tech}" if tech else base
-    persona_fragment = get_persona_prompt(persona)
-    prompt = f"{prompt}\n\nInterviewer tone: {persona_fragment}"
+    if include_persona:
+        persona_fragment = get_persona_prompt(persona)
+        prompt = f"{prompt}\n\nInterviewer tone (calibration): {persona_fragment}"
     return f"{prompt}\n\n{language_instruction(response_language)}"
 
 

@@ -568,6 +568,30 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     font-weight: 700 !important;
 }}
 .ia-card-accent {{ border-left: 3px solid var(--accent); }}
+.ia-compare-col-head {{
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 0.35rem;
+    padding: 0.35rem 0;
+}}
+.ia-compare-badge {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    padding: 0 0.35rem;
+    margin-right: 0.4rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-primary);
+    vertical-align: middle;
+}}
 .ia-badge {{
     display: inline-flex;
     align-items: center;

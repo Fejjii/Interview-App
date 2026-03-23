@@ -18,5 +18,11 @@ def test_unknown_label_falls_back() -> None:
     assert prompt_strategy_key_from_label("Not a real label") == "zero_shot"
 
 
-def test_compare_keys_subset() -> None:
-    assert COMPARE_PROMPT_STRATEGY_KEYS == ("zero_shot", "few_shot", "chain_of_thought")
+def test_compare_keys_covers_all_strategies() -> None:
+    assert COMPARE_PROMPT_STRATEGY_KEYS == (
+        "zero_shot",
+        "few_shot",
+        "chain_of_thought",
+        "structured_output",
+        "role_based",
+    )

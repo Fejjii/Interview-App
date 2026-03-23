@@ -55,3 +55,62 @@ def test_structured_output_template_mentions_json() -> None:
         n_questions=3,
     )
     assert "json" in res.user_prompt.lower()
+    assert "skill_tested" in res.user_prompt
+    assert "why_it_matters" in res.user_prompt
+
+
+def test_zero_shot_omits_persona_calibration_in_system_prompt() -> None:
+    """Zero-shot keeps system prompt minimal: technique + language, no persona calibration block."""
+    res = build_zero_shot_prompt(
+        role_category="Software Engineering",
+        role_title="Backend Engineer",
+        seniority="Senior",
+        interview_round="Technical Interview",
+        interview_focus="Technical Knowledge",
+        n_questions=3,
+        persona="Bar Raiser (Strict)",
+    )
+    assert "Interviewer tone" not in res.system_prompt
+    assert "Bar Raiser" not in res.system_prompt
+
+
+def test_few_shot_injects_focus_aligned_demonstrations() -> None:
+    res = build_few_shot_prompt(
+        role_category="Data Engineering",
+        role_title="Analytics Engineer",
+        seniority="Mid-Level",
+        interview_round="Technical Interview",
+        interview_focus="System Design / Architecture",
+        n_questions=2,
+    )
+    assert "Demonstration scenario" in res.user_prompt
+    assert "Example questions" in res.user_prompt
+    assert "event-driven" in res.user_prompt.lower()
+
+
+def test_role_based_includes_identity_and_behavior() -> None:
+    res = build_role_based_prompt(
+        role_category="Software Engineering",
+        role_title="Senior Data Engineer",
+        seniority="Senior",
+        interview_round="Hiring Manager Interview",
+        interview_focus="Leadership / Management",
+        persona="Hiring Manager",
+        n_questions=2,
+    )
+    assert "Senior Data Engineer" in res.user_prompt
+    assert "conducting the" in res.user_prompt.lower() or "conducting" in res.user_prompt.lower()
+    assert "outcome-focused" in res.user_prompt.lower() or "Hiring Manager" in res.user_prompt
+
+
+def test_chain_of_thought_system_lists_internal_steps() -> None:
+    res = build_chain_of_thought_prompt(
+        role_category="Software Engineering",
+        role_title="Engineer",
+        seniority="Senior",
+        interview_round="Technical Interview",
+        interview_focus="Technical Knowledge",
+        n_questions=3,
+    )
+    assert "chain-of-thought" in res.system_prompt.lower()
+    assert "competencies" in res.system_prompt.lower()

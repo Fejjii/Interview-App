@@ -23,6 +23,7 @@ from interview_app.security.pipeline import run_input_pipeline, run_output_pipel
 from interview_app.services.answer_evaluator import evaluate_answer
 from interview_app.services.interview_generator import generate_questions
 from interview_app.utils.errors import safe_user_message
+from interview_app.utils.interview_question_output import first_question_text_from_output
 from interview_app.utils.types import ChatMessage, EvaluationResult
 
 
@@ -163,6 +164,9 @@ def _generate_next_question(
         )
 
     text = (result.response.text or "").strip()
+    json_first = first_question_text_from_output(text)
+    if json_first:
+        return ChatTurnResult(assistant_message=json_first, evaluation=None)
     # Extract first question if model returned a list
     if text:
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]

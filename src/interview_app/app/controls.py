@@ -1,8 +1,7 @@
 """Streamlit sidebar: deployment, appearance, role, interview setup, saved sessions.
 
-Advanced generation parameters (model, temperature, etc.) use internal defaults; the UI
-omits the former Advanced section. `render_sidebar_configuration` returns a frozen
-`UISettings` snapshot for services and layout.
+Model preset remains fixed to the default mini preset; temperature, top-p, and max tokens
+are user-controlled in the Generation section and flow through `UISettings` to the LLM.
 """
 
 from __future__ import annotations
@@ -34,6 +33,7 @@ from interview_app.app.ui_settings import (
     prompt_strategy_key_from_label,
 )
 from interview_app.llm import MODEL_PRESETS
+from interview_app.llm.model_settings import ModelConfig
 from interview_app.prompts.personas import PERSONA_KEYS
 from interview_app.storage.sessions import (
     delete_all_sessions,
@@ -50,6 +50,16 @@ from interview_app.utils.language import (
 )
 
 
+def _session_defaults_for_preset(preset: ModelConfig) -> tuple[float, float, int]:
+    """Initial temperature, top_p, max_tokens for session state (matches prior internal defaults)."""
+    default_top_p = float(preset.default_top_p) if preset.default_top_p is not None else 1.0
+    return (
+        float(preset.default_temperature),
+        default_top_p,
+        int(preset.default_max_tokens or 800),
+    )
+
+
 def _sidebar_section_title(title: str, hint: str | None = None) -> None:
     st.sidebar.markdown(
         f'<p class="ia-sidebar-section">{html.escape(title)}</p>',
@@ -63,8 +73,8 @@ def render_sidebar_configuration() -> UISettings:
     """
     Render the full configuration sidebar and return a frozen `UISettings` snapshot.
 
-    Sections: Deployment, Appearance, Role Information, Interview Setup (including
-    workspace shortcuts), Saved Sessions.
+    Sections: Deployment, Appearance, Role Information, Interview Setup, Prompt Strategy,
+    Generation (temperature, top-p, max tokens), workspace shortcuts, Saved Sessions.
     """
     sb = st.sidebar
 
@@ -214,6 +224,48 @@ def render_sidebar_configuration() -> UISettings:
     )
     prompt_strategy = prompt_strategy_key_from_label(selected_label)
 
+    preset_keys = list(MODEL_PRESETS.keys())
+    model_preset = "gpt-4o-mini" if "gpt-4o-mini" in preset_keys else preset_keys[0]
+    preset = MODEL_PRESETS[model_preset]
+    t0, p0, m0 = _session_defaults_for_preset(preset)
+
+    if "ia_gen_temperature" not in st.session_state:
+        st.session_state.ia_gen_temperature = t0
+    if "ia_gen_top_p" not in st.session_state:
+        st.session_state.ia_gen_top_p = p0
+    if "ia_gen_max_tokens" not in st.session_state:
+        st.session_state.ia_gen_max_tokens = m0
+
+    sb.divider()
+    _sidebar_section_title(
+        "Generation",
+        "Sampling parameters for LLM calls (questions, chat, and evaluation).",
+    )
+    sb.slider(
+        "Temperature",
+        min_value=0.0,
+        max_value=2.0,
+        step=0.05,
+        key="ia_gen_temperature",
+        help="Higher values increase variety; lower values are more focused and deterministic.",
+    )
+    sb.slider(
+        "Top-p",
+        min_value=0.0,
+        max_value=1.0,
+        step=0.01,
+        key="ia_gen_top_p",
+        help="Nucleus sampling: considers tokens up to this cumulative probability mass.",
+    )
+    sb.number_input(
+        "Max tokens",
+        min_value=1,
+        max_value=32000,
+        step=50,
+        key="ia_gen_max_tokens",
+        help="Upper bound on the length of each model response.",
+    )
+
     sb.divider()
     sb.caption("Switch workspace or reset the transcript.")
     b1, b2, b3 = sb.columns(3)
@@ -268,15 +320,10 @@ def render_sidebar_configuration() -> UISettings:
     response_language = st.session_state.get("response_language") or DEFAULT_LANGUAGE
     _, role_title_trimmed = validate_role_title(role_title_raw)
 
-    # Internal defaults for model / sampling (Advanced sidebar removed; services unchanged)
     question_difficulty_mode = "Auto"
-    preset_keys = list(MODEL_PRESETS.keys())
-    model_preset = "gpt-4o-mini" if "gpt-4o-mini" in preset_keys else preset_keys[0]
-    preset = MODEL_PRESETS[model_preset]
-    default_top_p = float(preset.default_top_p) if preset.default_top_p is not None else 1.0
-    temperature = float(preset.default_temperature)
-    top_p = default_top_p
-    max_tokens = int(preset.default_max_tokens or 800)
+    temperature = float(st.session_state.ia_gen_temperature)
+    top_p = float(st.session_state.ia_gen_top_p)
+    max_tokens = int(st.session_state.ia_gen_max_tokens)
     show_debug = False
     effective_difficulty = infer_difficulty_from_context(
         seniority=seniority,

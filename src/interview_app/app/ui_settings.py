@@ -27,11 +27,13 @@ PROMPT_STRATEGY_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Role-based", "role_based"),
 )
 
-# Default comparison set (subset) for “Compare Prompt Strategies” in the Interview Questions tab.
+# All strategies compared side-by-side on the Interview Questions tab (same inputs, one question each).
 COMPARE_PROMPT_STRATEGY_KEYS: tuple[str, ...] = (
     "zero_shot",
     "few_shot",
     "chain_of_thought",
+    "structured_output",
+    "role_based",
 )
 
 

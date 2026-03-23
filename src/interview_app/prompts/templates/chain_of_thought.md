@@ -1,27 +1,22 @@
 <!--
 name: chain_of_thought
-description: Encourages step-by-step reasoning while keeping output concise.
+description: Scenario for CoT-backed generation; reasoning steps live in the system prompt.
 -->
 
-You are helping a candidate prepare for a realistic interview aligned with a professional hiring process.
+Generate interview questions for this scenario. Apply the chain-of-thought technique **internally** (see system instructions)—your reply must contain **only** the questions.
 
 **Role category:** {role_category}
-**Role/Title:** {role_title}
+**Target role title:** {role_title}
 **Seniority:** {seniority}
 **Interview round:** {interview_round}
 **Interview focus:** {interview_focus}
-**Difficulty:** {difficulty}
-**Persona:** {persona}
+**Question difficulty:** {difficulty}
+**Interviewer persona:** {persona}
 
 Job description (optional):
 {job_description}
 
-Task:
-Generate {n_questions} interview questions.
+Produce **{n_questions}** interview questions.
 
-Reasoning requirement:
-- Think step-by-step to ensure good coverage and appropriate difficulty for the round and focus.
-- Do NOT reveal your step-by-step reasoning in the final answer.
-
-Output:
-- Return only a numbered list of questions.
+Output format:
+- Numbered list **only** (1., 2., …). No preamble, no reasoning, no headings except the numbers.

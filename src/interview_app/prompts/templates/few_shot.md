@@ -1,40 +1,28 @@
 <!--
 name: few_shot
-description: Includes example questions to set style and depth.
+description: Few-shot: demonstrations keyed to interview focus, then a fresh generation task.
 -->
 
-You are helping a candidate prepare for an interview in a realistic hiring context.
+## Demonstrations (few-shot pattern)
 
-Use the following examples as a style guide (do not repeat them verbatim):
+{few_shot_demonstrations}
 
-Example 1:
-Role category: Software Engineering
-Role/Title: Backend Engineer
-Round: Technical Interview
-Focus: Technical Knowledge
-Questions:
-1) Describe the trade-offs between REST and gRPC for internal services.
-2) How would you design idempotent APIs for payment processing?
+---
 
-Example 2:
-Role category: Data Analysis
-Role/Title: Data Analyst
-Round: Hiring Manager Interview
-Focus: CV / Experience Deep Dive
-Questions:
-1) Walk me through a time you influenced a decision with data.
-2) How do you validate data quality before reporting?
+## Your task (new questions — do not copy the demonstrations)
 
-Now generate {n_questions} new questions for:
+Generate **{n_questions}** **new** interview questions for this target scenario. Match the **focus**, **depth**, and **realism** of the demonstrations above, but write original wording appropriate to the details below.
+
 **Role category:** {role_category}
-**Role/Title:** {role_title}
+**Target role title:** {role_title}
 **Seniority:** {seniority}
 **Interview round:** {interview_round}
 **Interview focus:** {interview_focus}
-**Difficulty:** {difficulty}
-**Persona:** {persona}
+**Question difficulty:** {difficulty}
+**Interviewer persona:** {persona}
 
 Job description (optional):
 {job_description}
 
-Output as a numbered list only.
+Output format:
+- Numbered list **only** (1., 2., …).

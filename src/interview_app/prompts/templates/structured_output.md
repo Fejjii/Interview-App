@@ -1,39 +1,36 @@
 <!--
 name: structured_output
-description: Produces JSON output for easier parsing in the UI.
+description: JSON schema for questions with skill, difficulty, and rationale fields.
 -->
 
-You are helping a candidate prepare for a professional interview.
-
-Return a JSON object that matches this schema exactly:
+Return **one JSON object** that matches this schema **exactly** (keys and nesting as shown). Fill the array with **{n_questions}** objects.
 
 {{
-  "role_category": "string",
-  "role_title": "string",
-  "seniority": "string",
-  "interview_round": "string",
-  "interview_focus": "string",
   "questions": [
     {{
-      "id": "q1",
       "question": "string",
-      "tags": ["string"]
+      "skill_tested": "string",
+      "difficulty": "string",
+      "why_it_matters": "string"
     }}
   ]
 }}
 
-Inputs:
+**Field rules:**
+- `question`: the full interview prompt as asked by an interviewer.
+- `skill_tested`: short label (e.g., "API design", "stakeholder communication").
+- `difficulty`: one of Easy | Medium | Hard | Expert (aligned to `{difficulty}` and seniority).
+- `why_it_matters`: one sentence on what this question reveals about fit.
+
+**Context inputs:**
 - role_category: {role_category}
 - role_title: {role_title}
 - seniority: {seniority}
 - interview_round: {interview_round}
 - interview_focus: {interview_focus}
-- difficulty: {difficulty}
+- calibration_difficulty: {difficulty}
 - persona: {persona}
 - job_description: {job_description}
 
-Requirements:
-- Generate {n_questions} items in "questions".
-- "id" must be unique and stable (q1, q2, ...).
-- Keep tags short (e.g., "behavioral", "system-design", "stakeholders", "metrics").
-- Output JSON only. No markdown fences.
+**Output rules:**
+- Valid JSON only. No markdown code fences. No text before or after the JSON object.

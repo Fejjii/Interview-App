@@ -1,9 +1,9 @@
 <!--
 name: zero_shot
-description: Direct instruction to generate interview questions.
+description: Direct instruction only—no examples, no explicit reasoning protocol in the reply.
 -->
 
-You are helping a candidate prepare for a realistic interview aligned with a professional hiring process.
+Generate interview preparation questions using **only** the scenario below. Do not include examples of your own, do not outline a reasoning plan, and do not add commentary—only the questions.
 
 **Role category:** {role_category}
 **Target role title:** {role_title}
@@ -11,16 +11,12 @@ You are helping a candidate prepare for a realistic interview aligned with a pro
 **Interview round:** {interview_round}
 **Interview focus:** {interview_focus}
 **Question difficulty:** {difficulty}
-**Interviewer persona:** {persona}
+**Interviewer persona (context for tone):** {persona}
 
-Generate {n_questions} interview questions tailored to this scenario.
+Produce **{n_questions}** distinct interview questions tailored to this setup.
 
 Job description (optional; use only what is provided—do not invent employer details):
 {job_description}
 
-Guidelines:
-- Match the round and focus (e.g., recruiter screen vs technical vs system design).
-- Calibrate depth to seniority and difficulty.
-- Keep questions realistic for the role category and industry norms.
-- Avoid trivia unless the focus explicitly calls for it.
-- Output as a numbered list only.
+Output format:
+- Numbered list **only** (1., 2., …). One question per item.
