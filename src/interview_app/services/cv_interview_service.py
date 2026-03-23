@@ -405,32 +405,7 @@ def run_cv_interview_pipeline(
             )
 
         llm_responses.append(resp1)
-        # #region agent log
-        from interview_app.debug_ndjson import agent_debug_log
-
-        agent_debug_log(
-            location="cv_interview_service.py:post_llm1",
-            message="extraction LLM raw response",
-            data={
-                "resp_len": len(resp1.text or ""),
-                "prefix": (resp1.text or "")[:200].replace("\n", "\\n"),
-            },
-            hypothesis_id="H1",
-        )
-        # #endregion
         out1 = run_output_pipeline(resp1.text, expect_json=True, service=_SERVICE_NAME)
-        # #region agent log
-        agent_debug_log(
-            location="cv_interview_service.py:after_out1",
-            message="output guard step 1",
-            data={
-                "safe": out1.safe,
-                "reason": out1.reason,
-                "flags": out1.flags,
-            },
-            hypothesis_id="H2",
-        )
-        # #endregion
         if not out1.safe:
             return CVInterviewServiceResult(
                 ok=False,
@@ -575,32 +550,7 @@ def run_cv_interview_pipeline(
         )
 
     llm_responses.append(resp2)
-    # #region agent log
-    from interview_app.debug_ndjson import agent_debug_log
-
-    agent_debug_log(
-        location="cv_interview_service.py:post_llm2",
-        message="generation LLM raw response",
-        data={
-            "resp_len": len(resp2.text or ""),
-            "prefix": (resp2.text or "")[:200].replace("\n", "\\n"),
-        },
-        hypothesis_id="H3",
-    )
-    # #endregion
     out2 = run_output_pipeline(resp2.text, expect_json=True, service=_SERVICE_NAME)
-    # #region agent log
-    agent_debug_log(
-        location="cv_interview_service.py:after_out2",
-        message="output guard step 2",
-        data={
-            "safe": out2.safe,
-            "reason": out2.reason,
-            "flags": out2.flags,
-        },
-        hypothesis_id="H4",
-    )
-    # #endregion
     if not out2.safe:
         return CVInterviewServiceResult(
             ok=False,

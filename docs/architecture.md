@@ -26,6 +26,18 @@ This document describes how the Interview App is layered, how data flows from th
 | **Security** | `security/` | Guards, pipeline, moderation, rate limiting, output validation, logging. |
 | **Config** | `config/settings.py` | Environment-backed settings (including `SECURITY_*`). |
 | **Storage** | `storage/sessions.py` | Local JSON sessions under `SESSIONS_DIR`. |
+| **Usage mode** | `app/usage_mode.py`, `ui/usage_mode_panel.py` | Demo (server `OPENAI_API_KEY`) vs BYO (session-only user key); `openai_api_key_for_llm()` resolves which key `LLMClient` uses. |
+| **Workspace reset** | `app/session_reset.py` | Full clear of mock chat, CV workspace, comparisons, feedback widgets, BYO secrets, and usage mode keys when applying a new mode; preserves sidebar role/appearance. |
+
+---
+
+## Session setup and API key resolution
+
+1. **Demo mode:** `LLMClient` uses `OPENAI_API_KEY` from settings (`.env` / environment). `openai_api_key_for_llm(session_state)` returns `None`, and services pass `api_key=None` so the client falls back to settings.
+2. **BYO mode:** After the user applies a valid key, the raw secret lives only in `st.session_state` under an internal key (`usage_mode.KEY_BYO_OPENAI_API_KEY`). `openai_api_key_for_llm` returns that string for `LLMClient(api_key=...)`. It is never serialized to saved session files or logs by design.
+3. **Apply usage mode** calls `reset_all_workspace_state` then sets the new mode and optional BYO key + display hint (`mask_api_key_for_display`).
+
+Layout and services obtain the key via `layout._session_openai_key()` (or equivalent) and thread it into `LLMClient` and `run_cv_interview_pipeline(..., openai_api_key=...)`.
 
 ---
 
@@ -64,7 +76,10 @@ flowchart LR
 |------|------|
 | `app/main.py` | Composition root: theme, sidebar, main content. |
 | `app/layout.py` | Hero, configuration bar, workspace tabs, chat and CV panels. |
-| `app/controls.py` | Sidebar → `UISettings`. |
+| `app/controls.py` | Sidebar → `UISettings`; saved sessions list/load (scoped). |
+| `app/usage_mode.py` | Demo vs BYO enum, key validation, mask hint, `openai_api_key_for_llm`. |
+| `ui/usage_mode_panel.py` | Session setup UI: Apply, reset, masked BYO input. |
+| `app/session_reset.py` | Full workspace reset on usage mode apply. |
 | `app/conversation_state.py` | Chat `session_state` helpers. |
 | `app/cv_session_state.py` | CV-specific `session_state`. |
 | `services/chat_service.py` | Mock interview turn routing and LLM calls. |
@@ -90,6 +105,16 @@ Adding a new strategy: implement a builder returning `PromptBuildResult`, regist
 ## Session persistence
 
 Saved mock interviews are **files on disk** (`*.json` under `SESSIONS_DIR`), not a database. Paths are resolved relative to the process current working directory unless `SESSIONS_DIR` is absolute. Session IDs are validated to prevent path traversal (`storage/sessions.py`).
+
+**Scoped storage:** Files are written under `demo/` for Demo mode and `byo/<sha256>/` for a specific BYO key so saved-session lists do not mix scopes. Legacy flat `*.json` at the sessions root are listed only in Demo scope.
+
+---
+
+## CV interview pipeline (structured outputs)
+
+1. **Upload / extract:** `cv_interview_service.run_cv_interview_pipeline` runs file validation, text extraction, `run_input_pipeline`, then an LLM call expecting **JSON** for `CVStructuredExtraction`; output is validated with `run_output_pipeline(..., expect_json=True)` and parsed via `cv/json_utils.parse_llm_json_model`.
+2. **Generate:** Second LLM call uses either **full prep** (`CVInterviewGeneration`) or **practice** (`CVPracticeQuestionGeneration`) models depending on `generation_mode` (`full_prep` vs `practice_questions`).
+3. **Practice evaluation:** `run_cv_practice_evaluation` parses batch feedback into `CVPracticeEvaluationBatch` with the same Pydantic + guardrail pattern.
 
 ---
 

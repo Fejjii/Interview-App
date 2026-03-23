@@ -66,6 +66,17 @@ All use the `SECURITY_` prefix (see `SecuritySettings` in `config/settings.py`):
 
 Global app settings: `OPENAI_API_KEY` (secret), `SESSIONS_DIR` (where JSON sessions are written—keep on trusted storage).
 
+### Bring Your Own (BYO) OpenAI key (in-app)
+
+When the user selects **Use your own OpenAI API key** and applies it:
+
+- The key is kept **only in Streamlit server `session_state`** for that browser session.
+- It is **not** written to `.env`, saved mock session JSON, browser storage, or application logs.
+- The UI may show a **non-reversible hint** (e.g. `sk-...` + last four characters) for confirmation.
+- Saved sessions on disk are **scoped by a hash of the key** (directory name only; the key itself is not stored in filenames’ content beyond the user’s own file system permissions).
+
+Treat this as appropriate for **single-user / trusted** deployments; a compromised host could still read process memory.
+
 ---
 
 ## Operational notes

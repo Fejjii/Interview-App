@@ -103,24 +103,7 @@ def validate_output(
     if expect_json:
         try:
             json.loads(cleaned)
-        except (json.JSONDecodeError, ValueError) as exc:
-            # #region agent log
-            from interview_app.debug_ndjson import agent_debug_log
-
-            prefix = cleaned[:400].replace("\n", "\\n")
-            agent_debug_log(
-                location="output_guard.py:validate_output",
-                message="expect_json json.loads failed",
-                data={
-                    "service": service,
-                    "truncated": truncated,
-                    "cleaned_len": len(cleaned),
-                    "prefix": prefix,
-                    "json_error": str(exc)[:300],
-                },
-                hypothesis_id="H1",
-            )
-            # #endregion
+        except (json.JSONDecodeError, ValueError):
             flags.append("invalid_json")
             log_security_event(
                 event="output_guard",

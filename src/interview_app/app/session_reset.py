@@ -40,6 +40,7 @@ _WORKSPACE_WIDGET_KEYS: tuple[str, ...] = (
     KEY_USAGE_DRAFT_RADIO,
 )
 
+
 def _pop_cv_practice_answer_keys(session_state: dict[str, Any]) -> None:
     """Remove dynamic practice-answer widget keys (cv_pa_<ver>_<i>)."""
     for k in list(session_state.keys()):

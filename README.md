@@ -17,8 +17,53 @@ A **Streamlit** web app that helps candidates practice technical and behavioral 
 | **Answer feedback** | Score-style feedback with strengths, gaps, and suggestions. |
 | **CV interview prep** | Upload PDF/DOCX, structured extraction, tailored questions and practice modes. |
 | **Dark mode** | Sidebar toggle; theme uses CSS tokens for readable contrast. |
-| **Saved sessions** | Local JSON under `data/sessions/` (gitignored); list, open, delete. |
+| **Saved sessions** | Local JSON under `data/sessions/` (gitignored), **scoped by usage mode** (Demo vs BYO); list, open, delete. |
 | **Guardrails** | Input validation, length limits, secret redaction, prompt-injection heuristics, moderation, rate limiting, and output checks (see [Security overview](#security--guardrails-overview)). |
+
+---
+
+## Session setup: Demo mode vs Bring Your Own (BYO) API key
+
+At the top of the sidebar, **Session setup** controls how API calls are billed for **this browser session** (Streamlit server-side `session_state` only):
+
+| Mode | Billing | API key source |
+|------|---------|----------------|
+| **Demo mode** | Uses the **server** project key from `OPENAI_API_KEY` in `.env` / environment. | Not entered in the UI. |
+| **Use your own OpenAI API key (BYO)** | Uses **your** key for this session. | Typed once per apply; stored only in memory for the active Streamlit session. |
+
+**Behavior:**
+
+- **Masked input:** In BYO mode, the key field defaults to **password** style; optional **Show key** reveals it locally.
+- **Session-only:** BYO keys are **not** written to disk, `localStorage`, or saved session JSON. They exist only in server memory until the tab/session ends or you apply a different mode.
+- **Full reset on Apply:** Clicking **Apply usage mode** runs a **full workspace reset**: mock interview transcript, CV prep state, strategy comparison, feedback fields, rate-limit counters, and in-memory BYO secrets are cleared, then the new mode (and BYO key if applicable) is applied. Sidebar preferences such as role, interview setup, and dark mode are **preserved**.
+- **Confirmation:** If you have unsaved work (messages, loaded session, CV analysis, or a strategy comparison), you must check a confirmation box before Apply proceeds.
+- **No cross-mode leakage:** Switching Demo ↔ BYO does not leave the previous mode’s chat or CV data in the UI; each Apply starts from a clean workspace for that mode.
+
+If Demo mode is selected but the server has **no** `OPENAI_API_KEY`, the UI shows a warning—configure the environment or switch to BYO with your key.
+
+---
+
+## Saved sessions and isolation
+
+Saved mock interviews are JSON files under `SESSIONS_DIR` (default `data/sessions/`). They are **isolated by usage scope**:
+
+- **Demo mode** sees sessions under `demo/` plus **legacy** flat `*.json` files at the sessions root (treated as Demo history).
+- **BYO mode** (with an applied key) sees only sessions under `byo/<sha256-of-key>/` for **that** key. Another BYO key gets a different folder. Demo sessions **do not** appear when you are in BYO mode, and vice versa.
+
+Each saved file may include a `usage_scope` tag (e.g. `demo`, `byo:<hex>`) for clarity; the directory layout is authoritative for listing.
+
+After switching modes with **Apply usage mode**, the sidebar session list reflects **only** the current scope (a rerun runs automatically).
+
+---
+
+## CV Interview Prep: Practice vs full prep
+
+On **CV Interview Prep**, after uploading a CV and running analysis:
+
+- **Practice (questions only):** Generates tailored **questions** without model “ideal” answers in that step. You type answers in the UI, then **Evaluate answers** runs structured feedback in batch (Pydantic-parsed).
+- **Full prep:** Produces the **full bundle**—overview-style context, questions, model answers, and follow-ups in one generation pass—using structured JSON validated with **`cv/models.py`** (same guardrail and JSON parsing pipeline as extraction).
+
+Both paths use the same extraction + guardrails; only the generation prompt and output model differ (`generation_mode` in `services/cv_interview_service.py`).
 
 ---
 
@@ -133,6 +178,17 @@ pytest tests\unit -v
 ```
 
 Integration tests under `tests/integration/` may be skipped unless `OPENAI_API_KEY` is set. Full detail: **[docs/testing.md](docs/testing.md)**.
+
+---
+
+## Reviewers: testing with your own API key
+
+1. Clone the repo and install dependencies (see [Installation and setup](#installation-and-setup)).
+2. You can run **without** putting a key in `.env` if you use **BYO** in the app: open the app, choose **Use your own OpenAI API key**, paste your key, and **Apply usage mode**.
+3. Alternatively, set `OPENAI_API_KEY` in `.env` and use **Demo mode** so the server uses that key.
+4. Run **`pytest tests/unit`** for core checks; optional integration smoke tests need a key in the environment (see [docs/testing.md](docs/testing.md)).
+
+Do not commit `.env` or share keys in issues or screenshots.
 
 ---
 
