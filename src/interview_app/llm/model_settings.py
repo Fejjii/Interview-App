@@ -1,17 +1,12 @@
+"""Named OpenAI model presets (temperature, top_p, max_tokens defaults).
+
+Sidebar preset keys map to ``ModelConfig`` rows. ``LLMClient`` merges these with
+``Settings`` so bare model names and preset keys both resolve to consistent parameters.
+
+Inputs: string keys from UI; outputs: ``ModelConfig`` for client construction.
+"""
+
 from __future__ import annotations
-
-"""
-Model presets used by the UI.
-
-The Streamlit sidebar lets users choose a "model preset" key (e.g. `gpt-4o-mini`).
-Each preset provides defaults for:
-- temperature
-- top_p (optional)
-- max_tokens (optional)
-
-The `LLMClient` can consume these presets to pick sane defaults without forcing the UI
-to hardcode per-model numbers.
-"""
 
 from typing import Literal, TypeGuard
 

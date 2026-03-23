@@ -1,5 +1,9 @@
-"""
-Lightweight session persistence: list, load, save sessions as JSON under data/sessions.
+"""Local JSON persistence for saved mock interview sessions.
+
+Files live under ``SESSIONS_DIR`` (see settings); each session is one ``*.json``
+with metadata and message list. Used by sidebar session controls and ``layout``.
+
+Security: session IDs are validated to prevent path traversal on load/delete.
 """
 
 from __future__ import annotations

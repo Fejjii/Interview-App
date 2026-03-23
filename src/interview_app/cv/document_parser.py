@@ -1,3 +1,11 @@
+"""CV file validation and plain-text extraction (PDF and DOCX).
+
+Raises ``CVFileValidationError`` / ``CVExtractionError`` from ``cv/exceptions`` on
+invalid uploads or unreadable files. Used only from ``cv_interview_service`` and tests.
+
+Inputs: raw bytes + filename; outputs: normalized text string for downstream cleaning.
+"""
+
 from __future__ import annotations
 
 import io

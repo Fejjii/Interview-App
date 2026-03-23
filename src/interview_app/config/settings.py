@@ -1,7 +1,4 @@
-from __future__ import annotations
-
-"""
-Centralized configuration (settings) for the app.
+"""Centralized configuration (settings) for the app.
 
 This project uses environment variables as the primary configuration mechanism.
 For local development, a `.env` file in the project root is supported.
@@ -10,6 +7,8 @@ Typical flow:
 - `streamlit_app.py` loads `.env` so env vars are available
 - `LLMClient` calls `get_settings()` to read OPENAI_API_KEY, defaults, etc.
 """
+
+from __future__ import annotations
 
 from functools import lru_cache
 

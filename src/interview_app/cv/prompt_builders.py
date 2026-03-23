@@ -1,3 +1,9 @@
+"""System and user prompt strings for the CV pipeline (extraction, questions, practice).
+
+Wraps CV text with delimiters and applies ``protect_system_prompt`` where needed.
+Imported by ``cv_interview_service`` only—no Streamlit dependencies.
+"""
+
 from __future__ import annotations
 
 from interview_app.security.guards import protect_system_prompt

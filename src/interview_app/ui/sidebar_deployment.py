@@ -1,4 +1,9 @@
-"""Sidebar: deployment gateway — links and short guides (not automation)."""
+"""Sidebar **Deployment** section: links and checklists for hosting Streamlit apps.
+
+Informational only—no cloud API calls. Rendered from ``controls`` via
+``render_sidebar_deployment`` for users who want to deploy the app to Streamlit
+Community Cloud, Docker, etc.
+"""
 
 from __future__ import annotations
 

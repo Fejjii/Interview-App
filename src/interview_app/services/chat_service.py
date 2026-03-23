@@ -1,9 +1,12 @@
-"""
-Chat orchestration for the interview coach flow.
+"""Mock interview chat orchestration (coach turns, intent routing, LLM calls).
 
-One turn: build system prompt (persona, role, difficulty, type), decide
-"ask next question" vs "evaluate + follow-up", call interview_generator or
-answer_evaluator, return assistant message and optional evaluation.
+Consumes ``UISettings`` and chat history as ``ChatMessage`` list; runs the latest
+user message through ``run_input_pipeline``, then dispatches to
+``interview_generator`` or ``answer_evaluator`` depending on greeting vs
+interview vs follow-up intent.
+
+Outputs ``ChatTurnResult`` (assistant text plus optional ``EvaluationResult``).
+Mutates nothing directly—callers pass ``session_state`` for rate limiting.
 """
 
 from __future__ import annotations
@@ -46,10 +49,22 @@ def run_turn(
     session_state: dict[str, Any] | None = None,
 ) -> ChatTurnResult:
     """
-    Run one coach turn. Messages already include the latest user message.
+    Run one coach turn. ``messages`` must already include the latest user message.
 
-    - First message (no prior assistant): generate first interview question.
-    - After user answers: evaluate the answer, then return brief feedback + one follow-up question.
+    Routing:
+    - Empty history: prompt the user to start.
+    - No assistant messages yet: greeting, general Q&A, job context, or first question.
+    - After assistant exists: infer intent (start interview, small talk, or answer evaluation + follow-up).
+
+    Args:
+        settings: Sidebar-derived configuration (role, persona, model, etc.).
+        messages: Full transcript including the new user turn at the end.
+        session_state: Streamlit session dict for rate limiting; optional.
+
+    Returns:
+        Assistant reply text and optional structured evaluation for the last answer.
+
+    Side effects: none on ``messages``; may read rate-limit state via ``session_state``.
     """
     if not messages:
         return ChatTurnResult(

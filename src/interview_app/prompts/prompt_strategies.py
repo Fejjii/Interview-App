@@ -1,11 +1,13 @@
+"""Composable prompt strategies for interview question generation (zero/few-shot, CoT, etc.).
+
+Pure functions: no Streamlit imports, no network I/O. Each ``build_*`` function
+returns ``PromptBuildResult`` (system + user strings) using templates from
+``prompt_templates`` and persona text from ``personas``.
+
+Consumed exclusively by ``services/interview_generator`` and unit tests.
+"""
+
 from __future__ import annotations
-
-"""
-Prompt-building functions ("prompt strategies").
-
-Pure module (no Streamlit, no OpenAI calls): maps interview context to
-`system_prompt` + `user_prompt` pairs for `LLMClient`.
-"""
 
 from dataclasses import dataclass
 

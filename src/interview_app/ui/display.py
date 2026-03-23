@@ -82,7 +82,7 @@ def show_generated_questions_output(
 
 def _split_first_numbered_question(text: str) -> tuple[str, list[str]]:
     """Split numbered list: first line vs remaining lines (strip numbering)."""
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return "", []
 
@@ -99,7 +99,7 @@ def _split_first_numbered_question(text: str) -> tuple[str, list[str]]:
         return line
 
     first = strip_num(lines[0])
-    rest = [strip_num(l) for l in lines[1:]]
+    rest = [strip_num(line) for line in lines[1:]]
     return first, [r for r in rest if r]
 
 

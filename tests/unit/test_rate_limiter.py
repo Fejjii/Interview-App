@@ -2,13 +2,12 @@ from __future__ import annotations
 
 """Unit tests for session-based rate limiting."""
 
-import pytest
 
 from interview_app.security.rate_limiter import (
+    _SESSION_KEY,
     RateLimitResult,
     check_rate_limit,
     reset_rate_limit,
-    _SESSION_KEY,
 )
 
 

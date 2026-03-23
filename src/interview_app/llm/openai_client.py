@@ -1,3 +1,16 @@
+"""OpenAI SDK adapter: single entry point for chat completions from services.
+
+Isolates OpenAI-specific types and request shaping. Callers use
+``LLMClient.generate_response`` and receive ``LLMResponse`` (see ``utils.types``).
+
+Each successful or failed call writes a **structured audit log** (model, latency,
+token counts, route label)—never full prompt text. Fits between ``services/`` and
+the external OpenAI HTTP API.
+
+Raises:
+    ValueError: If no API key can be resolved from settings or constructor args.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -10,13 +23,6 @@ from openai import OpenAI
 from interview_app.config.settings import Settings, get_settings
 from interview_app.llm.model_settings import MODEL_PRESETS, ModelConfig, is_model_preset_key
 from interview_app.utils.types import LLMResponse, LLMUsage
-
-__doc__ = """OpenAI API wrapper (LLM client).
-
-The rest of the app should not need to know about OpenAI SDK details. This module
-provides `LLMClient.generate_response(...) -> LLMResponse`. Each call emits a
-lightweight structured audit log (no prompt bodies, no PII).
-"""
 
 logger = logging.getLogger("interview_app.llm")
 

@@ -1,50 +1,93 @@
 # Development
 
+Guidelines for running, extending, and maintaining the Interview App locally.
+
+---
+
 ## Environment
 
-- Python **3.11+**
-- Recommended: create a virtual environment (`.venv`) in the repo root.
+- **Python 3.11+** (see `requires-python` in `pyproject.toml`).
+- Use a **virtual environment** at the project root (e.g. `.venv`).
+- Never commit **secrets**: use `.env` locally; `.env.example` documents variables only.
+
+---
 
 ## Common commands
 
-### Install
+### Install dependencies
 
-```bash
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### Run
+### Run the app
 
-```bash
+```powershell
 streamlit run streamlit_app.py
 ```
 
+Or with Make (Unix/Git Bash): `make run`.
+
 ### Tests
 
-```bash
+```powershell
 pytest
+pytest tests\unit -v
 ```
 
-### Lint / format / typecheck
+See [testing.md](testing.md) for integration tests and manual guardrail checks.
 
-```bash
+### Lint, format, typecheck
+
+```powershell
 ruff check src tests
 black src tests
 mypy src
 ```
 
+Or: `make lint`, `make format`, `make typecheck`.
+
+---
+
 ## Project conventions
 
-- **`src/` layout**: application code lives under `src/interview_app/`.
-- **Small modules**: keep UI, services, prompts, and LLM wiring separated.
-- **No secrets in git**: use `.env` locally; `.env.example` documents keys.
+- **`src/` layout:** Import the package as `interview_app` after `streamlit_app.py` inserts `src/` on `sys.path`.
+- **Small, focused modules:** Keep Streamlit-specific code in `app/` and `ui/`; business logic in `services/`.
+- **Type hints:** Prefer explicit types on public functions; Pydantic models for structured data crossing boundaries.
+- **Errors:** Surface user-safe messages via `utils/errors.py` helpers where appropriate; log security events through `security/logging.py`.
+
+---
 
 ## Adding a new prompt strategy
 
-1. Add or update a template in `src/interview_app/prompts/templates/` (optional).
-2. Add a builder function in `src/interview_app/prompts/prompt_strategies.py` that returns a `PromptBuildResult` (system + user prompt).
-3. Wire the new strategy into the UI control that selects strategies (`src/interview_app/app/controls.py`) and into the service function that uses it.
-4. Add a unit test to validate the strategy’s prompt composition (recommended).
+1. Add or adjust content in `prompts/prompt_templates.py` if you need new static blocks.
+2. Implement a builder in `prompts/prompt_strategies.py` that returns `PromptBuildResult` (system + user strings).
+3. Register the strategy in the strategy dispatch used by `interview_generator` (and any UI selectbox in `app/controls.py`).
+4. Add a **unit test** that asserts key phrases or structure in the composed prompts (see existing tests under `tests/unit/test_prompt_strategies.py`).
 
+---
+
+## Adding a new workspace tab or service
+
+1. Extend `WORKSPACE_TAB_LABELS` in `app/ui_settings.py` if you add a primary tab.
+2. Render the panel in `app/layout.py` and keep orchestration there or in a small helper module under `app/`.
+3. Implement LLM-facing logic in `services/` with `run_input_pipeline` / `run_output_pipeline` around model calls.
+4. Add tests under `tests/unit/` for parsing and guardrail behavior.
+
+---
+
+## Debugging
+
+- **Prompt debug:** When enabled in the sidebar, some flows show system/user prompts in the UI (never logged by default in structured audit entries).
+- **Guardrail expanders:** The UI can show structured guardrail summaries for failed or flagged requests.
+- **Session files:** Inspect JSON under `data/sessions/` (or your `SESSIONS_DIR`) for saved transcripts.
+
+---
+
+## Related docs
+
+- [architecture.md](architecture.md) — layers and data flow.
+- [testing.md](testing.md) — pytest and manual checks.
+- [security.md](security.md) — guardrails and configuration.

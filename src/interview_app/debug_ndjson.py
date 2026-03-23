@@ -1,4 +1,8 @@
-"""Session debug NDJSON logger (debug mode). Writes one JSON object per line."""
+"""Optional NDJSON debug logger for development (one JSON object per line).
+
+Not used in normal user flows; safe to ignore in production. Writes beside the
+workspace root path resolved from this file's location.
+"""
 
 from __future__ import annotations
 

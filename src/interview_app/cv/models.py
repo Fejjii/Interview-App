@@ -1,3 +1,10 @@
+"""Pydantic models for CV extraction, interview generation, and practice evaluation.
+
+These structures are the contract between ``cv_interview_service``, LLM JSON parsing
+(``cv/json_utils``), and the Streamlit display layer. Fields should stay stable
+for backward compatibility with saved session payloads where applicable.
+"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

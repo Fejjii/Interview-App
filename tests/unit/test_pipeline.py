@@ -2,10 +2,8 @@ from __future__ import annotations
 
 """Unit tests for the guardrail pipeline orchestrator."""
 
-import pytest
 
 from interview_app.security.pipeline import (
-    InputPipelineResult,
     run_input_pipeline,
     run_output_pipeline,
 )
@@ -59,7 +57,7 @@ class TestInputPipeline:
                 service="test",
             )
 
-        result = run_input_pipeline(
+        _ = run_input_pipeline(
             "Valid input.",
             session_state=session,
             check_rate=True,
@@ -79,6 +77,7 @@ class TestInputPipeline:
             )
         # Monkeypatch a tight limit
         from unittest.mock import patch
+
         from interview_app.config.settings import SecuritySettings
 
         tight = SecuritySettings(rate_limit_max_requests=2, rate_limit_window_seconds=60)

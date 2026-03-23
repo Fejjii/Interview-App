@@ -39,6 +39,8 @@ extend-exclude = [
   "build",
   "dist",
 ]
+
+[tool.ruff.lint]
 select = [
   "E",
   "F",
@@ -48,9 +50,11 @@ select = [
 ignore = [
   "E203",
   "E501",
+  # Many modules use ``from __future__`` then a module docstring then imports (valid Python).
+  "E402",
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["interview_app"]
 combine-as-imports = true
 

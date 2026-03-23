@@ -18,8 +18,7 @@ from interview_app.security.guards import GuardrailResult, protect_system_prompt
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
 from interview_app.utils.errors import safe_user_message
 from interview_app.utils.language import language_instruction
-from interview_app.utils.types import LLMResponse, EvaluationResult
-
+from interview_app.utils.types import EvaluationResult, LLMResponse
 
 _SERVICE_NAME = "answer_evaluator"
 
@@ -320,7 +319,7 @@ def _parse_evaluation_response(text: str) -> EvaluationResult | None:
         return (m.group(1).strip() if m else "").strip()
 
     def bullets(block: str) -> list[str]:
-        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
         out = []
         for line in lines:
             for prefix in ("- ", "* ", "• ", "1. ", "2. ", "3. "):

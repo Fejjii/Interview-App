@@ -5,8 +5,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from interview_app.app.ui_settings import UISettings
-from interview_app.services.chat_service import _answer_general_question
 from interview_app.security.output_guard import OutputGuardResult
+from interview_app.services.chat_service import _answer_general_question
 from interview_app.utils.types import ChatMessage, LLMResponse
 
 

@@ -1,3 +1,14 @@
+"""User-input guardrails: validation, secret redaction, and injection heuristics.
+
+This module sits at the core of the pre-LLM path. ``run_guardrails`` returns a
+``GuardrailResult`` consumed by ``security.pipeline`` and the Streamlit UI for
+debugging. It does not perform moderation or rate limiting—those run in the
+pipeline after guardrails succeed.
+
+Side effects: may emit structured security log entries when injection is
+detected (no raw prompt text).
+"""
+
 from __future__ import annotations
 
 import re
@@ -7,8 +18,6 @@ from pydantic import BaseModel, Field
 
 from interview_app.config.settings import get_security_settings
 from interview_app.security.logging import log_security_event
-
-__doc__ = """Security guardrails for user-provided text (validation, secret redaction, injection heuristics)."""
 
 
 class GuardrailResult(BaseModel):

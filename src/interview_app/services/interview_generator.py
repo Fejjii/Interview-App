@@ -26,7 +26,6 @@ from interview_app.security.pipeline import run_input_pipeline, run_output_pipel
 from interview_app.utils.errors import safe_user_message
 from interview_app.utils.types import LLMResponse
 
-
 _SERVICE_NAME = "interview_generator"
 
 

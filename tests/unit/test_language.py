@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from interview_app.utils.language import (
     DEFAULT_LANGUAGE,
-    SUPPORTED_LANGUAGES,
     detect_language,
     get_language_name,
     language_instruction,

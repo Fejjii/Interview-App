@@ -1,3 +1,13 @@
+"""CV-based interview preparation: extract text, structure profile JSON, generate questions.
+
+Orchestrates file parsing (``cv/document_parser``), guardrails, LLM calls for
+extraction and generation, and optional practice-mode evaluation. Used by the
+**CV Interview Prep** workspace in ``app/layout``.
+
+Primary outputs: ``CVInterviewServiceResult`` and related dataclasses in
+``cv/models``; errors surface as user-safe strings plus guardrail maps for UI.
+"""
+
 from __future__ import annotations
 
 import hashlib

@@ -1,9 +1,15 @@
-"""Frozen snapshot of Streamlit UI-controlled knobs (shared across app layers)."""
+"""UI configuration snapshot (``UISettings``) and workspace tab labels.
+
+Produced by ``app/controls.render_sidebar_configuration`` and passed into
+``layout`` and services so LLM parameters stay consistent across tabs.
+
+Immutable: ``UISettings`` is a frozen dataclass suitable for threading through
+pure functions without accidental mutation.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-
 
 WORKSPACE_TAB_LABELS: tuple[str, ...] = (
     "Mock Interview",

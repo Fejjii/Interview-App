@@ -1,7 +1,7 @@
-"""
-Streamlit session state for the CV interview-prep workspace.
+"""Streamlit ``session_state`` keys and helpers for the CV interview-prep tab.
 
-Keeps a single namespace of keys so we can reset cleanly and avoid stale UI.
+Centralizes ``cv_ws_*`` keys so ``layout`` and ``cv_interview_service`` stay in sync
+and resets can clear the whole workspace without touching unrelated chat state.
 """
 
 from __future__ import annotations

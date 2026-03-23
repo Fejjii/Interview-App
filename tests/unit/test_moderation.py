@@ -63,7 +63,7 @@ def test_normal_interview_content_passes() -> None:
 
 def test_moderation_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     """When moderation is disabled in config, everything passes."""
-    from interview_app.config.settings import SecuritySettings, get_security_settings
+    from interview_app.config.settings import SecuritySettings
 
     disabled = SecuritySettings(moderation_enabled=False)
     monkeypatch.setattr(

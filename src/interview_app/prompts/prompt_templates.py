@@ -1,3 +1,11 @@
+"""Load markdown prompt templates from ``prompts/templates/*.md``.
+
+``prompt_strategies`` calls ``load_template_text`` with logical names (e.g.
+``zero_shot``). Path traversal in template names is rejected.
+
+Outputs: raw template strings for placeholder substitution in strategies.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

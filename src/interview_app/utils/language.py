@@ -1,9 +1,9 @@
-"""
-Language detection and response-language handling.
+"""Language lists, detection helpers, and prompt suffixes for response language.
 
-Used to detect language from user input (job description or first message)
-and to enforce that all model outputs (questions, feedback, critique) are in that language.
-Defaults to English when detection is uncertain.
+Supports sidebar "response language" and optional ``langdetect`` for auto mode.
+Used by ``controls``, ``prompt_strategies``, and ``answer_evaluator``.
+
+Side effects: none except lazy import probe for ``langdetect`` availability.
 """
 
 from __future__ import annotations

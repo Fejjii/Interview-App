@@ -1,6 +1,11 @@
-"""Top-level Streamlit app runner.
+"""Streamlit composition root for the interview app.
 
-Composition root: page config, theme injection, sidebar configuration, main workspace.
+Wires together theme injection, session initialization, sidebar controls (which
+produce ``UISettings``), and the main workspace from ``layout``. This module is
+the orchestration layer between ``streamlit_app`` (entry) and feature UI in
+``layout`` / ``controls``.
+
+Side effects: mutates Streamlit session state and renders the full page.
 """
 
 from __future__ import annotations

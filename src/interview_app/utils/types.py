@@ -1,12 +1,13 @@
+"""Cross-cutting Pydantic models and DTOs (LLM, chat, sessions, evaluation).
+
+Keeps services and UI decoupled from OpenAI SDK response objects. Stable shapes
+here make unit tests straightforward.
+
+Inputs/outputs: constructed by ``llm/openai_client``, ``services/*``, and
+``storage/sessions``; consumed by Streamlit display helpers and tests.
+"""
+
 from __future__ import annotations
-
-"""
-Shared data models (types) used across the app.
-
-These are intentionally small and stable:
-- services and UI can pass around `LLMResponse` without depending on OpenAI SDK objects
-- tests can assert on simple Pydantic models
-"""
 
 from pydantic import BaseModel, Field, model_validator
 

@@ -11,8 +11,9 @@ These tests intentionally cover only the "scaffold-level" behavior:
 - system prompt hardening helper
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from interview_app.security.guards import (
     detect_prompt_injection,

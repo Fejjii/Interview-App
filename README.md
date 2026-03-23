@@ -1,108 +1,181 @@
-# Interview Practice App (Streamlit + OpenAI)
+# AI Interview Preparation Assistant
 
-Practice interviews by simulating a mock chat, generating targeted questions, and evaluating answers with an LLM—wrapped in a Streamlit UI with sidebar configuration, optional dark mode, and security guardrails.
+A **Streamlit** web app that helps candidates practice technical and behavioral interviews. It combines **OpenAI** language models with configurable prompts, a mock interview chat, question generation, answer feedback, and **CV-based interview prep**—all behind a layered **security and guardrail** pipeline suitable for portfolio and local production use.
+
+---
 
 ## Features
 
-- **Sidebar configuration** — Role, seniority, job description, interview round, focus, interviewer persona, response language, and advanced options (difficulty mode, prompt strategy, model, temperature, top-p, max tokens). Shortcuts: generate questions, open mock interview, reset transcript, reopen or delete saved sessions.
-- **Mock interview chat** — Back-and-forth practice with the coach; session save/new; configuration summary bar on the main page.
-- **Interview question generator** — Produces structured questions from your current setup (with optional debug prompts).
-- **Answer evaluation** — Paste a question and answer for scored feedback (strengths, gaps, suggestions).
-- **Dark mode** — Toggle in the sidebar; theme uses CSS tokens and Streamlit/Base Web overrides for readable contrast on inputs, dropdowns, labels, and chat.
-- **Security guards** — Input validation, length limits, moderation/rate limiting, output checks, and injection heuristics via the security pipeline (see `src/interview_app/security/`).
+| Area | What it does |
+|------|----------------|
+| **Sidebar configuration** | Role category, seniority, job description, interview round, focus, interviewer persona, response language, and generation settings (model preset, temperature, top-p, max tokens). Shortcuts for generating questions, opening the mock interview, resetting the transcript, and managing saved sessions. |
+| **Mock interview** | Turn-by-turn coaching: greetings, explicit “start interview” flows, generated questions, answer evaluation with follow-ups. |
+| **Interview questions** | Structured questions from your current setup, with optional debug prompts. |
+| **Answer feedback** | Score-style feedback with strengths, gaps, and suggestions. |
+| **CV interview prep** | Upload PDF/DOCX, structured extraction, tailored questions and practice modes. |
+| **Dark mode** | Sidebar toggle; theme uses CSS tokens for readable contrast. |
+| **Saved sessions** | Local JSON under `data/sessions/` (gitignored); list, open, delete. |
+| **Guardrails** | Input validation, length limits, secret redaction, prompt-injection heuristics, moderation, rate limiting, and output checks (see [Security overview](#security--guardrails-overview)). |
 
-### Saved sessions (local JSON)
+---
 
-- **Where they live** — Each saved mock interview is a separate file under `data/sessions/` (relative to the directory from which you run `streamlit run`, unless overridden by `SESSIONS_DIR` in your environment). The folder is listed in `.gitignore` so session data is not committed.
-- **Saving** — In **Mock Interview**, use **Save** to write the current transcript and sidebar metadata to disk. **New chat** clears the live transcript without removing saved files.
-- **Sidebar list** — **Saved sessions** shows recent sessions (newest first). **Open** loads a session into the mock interview tab.
-- **Delete one** — **Del** removes that session’s file and refreshes the list. If you delete the session you currently had loaded, the in-memory transcript is cleared.
-- **Delete all** — **Delete all sessions** asks for confirmation, then removes every `*.json` file in the sessions directory and clears the loaded session state.
+## Architecture overview
 
-If you want a longer narrative and diagrams, see `docs/PROJECT_OVERVIEW.md`.
+The app follows a **thin UI → services → LLM** flow:
 
-## Quick start (Windows PowerShell)
+1. **Entry:** `streamlit_app.py` adds `src/` to `sys.path`, loads `.env`, calls `interview_app.app.main.run()`.
+2. **App layer:** `app/main.py` composes theme, sidebar (`controls.py`), and main workspace (`layout.py`).
+3. **Services:** `interview_generator`, `answer_evaluator`, `chat_service`, `cv_interview_service` implement domain flows; each runs inputs through `security/pipeline.py` before calling `llm/openai_client.py`.
+4. **Prompts:** Templates and strategies live under `prompts/`; personas under `prompts/personas.py`.
+5. **Persistence:** `storage/sessions.py` reads/writes session JSON.
 
-Create and activate a virtual environment:
+For diagrams and module boundaries, see **[docs/architecture.md](docs/architecture.md)**.
 
-```bash
+---
+
+## Tech stack
+
+- **Python 3.11+**
+- **Streamlit** — UI and session state
+- **OpenAI Python SDK (v1+)** — chat completions
+- **Pydantic / pydantic-settings** — configuration and structured models
+- **langdetect** — optional language hints
+- **pypdf, python-docx** — CV text extraction
+
+Development tooling: **pytest**, **ruff**, **black**, **mypy** (see [docs/development.md](docs/development.md)).
+
+---
+
+## Installation and setup
+
+### 1. Clone and virtual environment (Windows PowerShell example)
+
+```powershell
+cd path\to\sfejji-AE.1.5
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
-Configure credentials (recommended):
+### 2. Environment variables
 
-- Copy `.env.example` → `.env`
-- Set `OPENAI_API_KEY` inside `.env` (never commit `.env`)
+Copy the template and add your API key:
 
-Run the app:
+```powershell
+copy .env.example .env
+```
 
-```bash
+Edit `.env` (never commit it). See **[Environment variables](#environment-variables)** below.
+
+---
+
+## Environment variables
+
+| Variable | Purpose | Notes |
+|----------|---------|--------|
+| `OPENAI_API_KEY` | OpenAI API access | **Required** for live LLM calls |
+| `OPENAI_MODEL` | Default model name or preset key | Default: `gpt-4o-mini` |
+| `OPENAI_TEMPERATURE` | Default sampling temperature | Default: `0.2` |
+| `APP_ENV` | Logical environment label | e.g. `dev`, `prod` |
+| `SESSIONS_DIR` | Where session JSON files are stored | Default: `data/sessions` (relative to process CWD) |
+
+Security-related variables use the `SECURITY_` prefix (see [docs/security.md](docs/security.md)):
+
+- `SECURITY_MAX_INPUT_LENGTH`, `SECURITY_OUTPUT_MAX_LENGTH`
+- `SECURITY_RATE_LIMIT_MAX_REQUESTS`, `SECURITY_RATE_LIMIT_WINDOW_SECONDS`
+- `SECURITY_MODERATION_ENABLED`, `SECURITY_PROMPT_INJECTION_STRICT`
+- `SECURITY_CV_MAX_FILE_BYTES`, `SECURITY_CV_MAX_TEXT_CHARS`
+
+---
+
+## How to run the app
+
+From the project root (repository folder containing `streamlit_app.py`):
+
+```powershell
 streamlit run streamlit_app.py
 ```
 
-## High-level architecture (how files connect)
+Open the URL shown (typically `http://localhost:8501`).
 
-Runtime flow (one request):
+---
 
-1. **Entry**: `streamlit_app.py` starts Streamlit, adds `src/` to the import path, loads `.env`, then calls `interview_app.app.main.run()`.
-2. **UI**: `src/interview_app/app/main.py` builds the page and calls:
-   - `src/interview_app/app/controls.py` — `render_sidebar_configuration()` returns a `UISettings` snapshot.
-   - `src/interview_app/app/layout.py` — hero, configuration pill bar, workspace (Mock Interview / Questions / Feedback), chat and service wiring.
-   - `src/interview_app/ui/theme.py` — light/dark CSS and custom HTML styling.
-3. **Services**: `interview_generator`, `answer_evaluator`, `chat_service` call the LLM after guardrails.
-4. **Security + prompts + LLM**: `security/pipeline.py`, `guards.py`, prompts and templates, `llm/openai_client.py`.
-5. **Display**: `ui/display.py`, `ui/widgets.py`. Sessions: `storage/sessions.py`.
+## How to run tests
 
-## Prompt strategies (5 techniques)
-
-Selectable under **Advanced settings** in the sidebar:
-
-- `zero_shot`, `few_shot`, `chain_of_thought`, `structured_output`, `role_based`
-
-Turn on **Show debug** to see system + user prompts when supported.
-
-## Guardrails
-
-User inputs are validated and passed through the security pipeline (`security/pipeline.py`) where configured: length limits, moderation, rate limiting, injection heuristics, and output guarding. See unit tests under `tests/unit/test_*.py` for guards, pipeline, and moderation.
-
-## File map (selected)
-
-| Path | Role |
-|------|------|
-| `streamlit_app.py` | Entrypoint; `sys.path` + `.env` + `main.run()` |
-| `app/main.py` | Page config, theme, sidebar + main composition |
-| `app/controls.py` | Sidebar UI → `UISettings` |
-| `app/layout.py` | Main workspace, chat, questions tab, feedback tab |
-| `app/ui_settings.py` | `UISettings` dataclass |
-| `app/conversation_state.py` | Chat + session state helpers |
-| `ui/theme.py` | Light/dark CSS |
-| `services/chat_service.py` | Mock interview turns |
-| `storage/sessions.py` | Saved session JSON |
-
-## Tests
-
-```bash
+```powershell
 pytest
-pytest tests/unit
+pytest tests\unit -v
 ```
 
-Integration tests skip unless `OPENAI_API_KEY` is set.
+Integration tests under `tests/integration/` may be skipped unless `OPENAI_API_KEY` is set. Full detail: **[docs/testing.md](docs/testing.md)**.
 
-## Lint / format / typecheck
+---
 
-```bash
-ruff check src tests
-black src tests
-mypy src
+## Project structure
+
+```
+sfejji-AE.1.5/
+├── streamlit_app.py          # Entrypoint: path, .env, main.run()
+├── pyproject.toml            # Project metadata and tool config
+├── requirements.txt
+├── .env.example              # Documented env vars (no secrets)
+├── data/sessions/            # Saved sessions (gitignored)
+├── docs/
+│   ├── architecture.md
+│   ├── development.md
+│   ├── testing.md
+│   ├── security.md
+│   ├── DEPLOYMENT.md
+│   └── PROJECT_OVERVIEW.md   # Longer narrative / diagrams
+├── scripts/                  # Optional demos and smoke tests
+├── src/interview_app/
+│   ├── app/                  # Streamlit composition, layout, session state
+│   ├── ui/                   # Theme, widgets, display helpers
+│   ├── services/             # Interview, chat, CV pipelines
+│   ├── prompts/              # Strategies, templates, personas
+│   ├── llm/                  # OpenAI client, model presets
+│   ├── security/             # Guards, pipeline, moderation, rate limits
+│   ├── config/               # Settings from env
+│   ├── storage/              # Session JSON I/O
+│   ├── cv/                   # CV parsing, models, prompt builders
+│   └── utils/                # Types, errors, language helpers
+└── tests/
+    ├── unit/
+    └── integration/
 ```
 
-## Deployment (Docker + cloud)
+---
 
-See `docs/DEPLOYMENT.md` for Docker and cloud notes.
+## Security / guardrails overview
+
+User and file-derived text is validated through a **single pipeline** (`security/pipeline.py`): length checks, sanitization, secret redaction, prompt-injection heuristics, optional moderation, and per-session rate limiting before the LLM; outputs are validated afterward. This is **defense in depth** for a client-trusted UI—not a substitute for server-side enforcement in a multi-tenant product.
+
+Details, configuration, and manual test ideas: **[docs/security.md](docs/security.md)**.
+
+---
+
+## Roadmap / future improvements
+
+- Optional **server-side** API with auth and centralized rate limits for multi-user deployment.
+- **Structured outputs** (JSON schema) more consistently across all LLM surfaces.
+- **Evaluation** harness for prompt/version regression tests.
+- **i18n** beyond language instructions in prompts.
+- **Observability** exports (OpenTelemetry) for production monitoring.
+
+---
+
+## Additional documentation
+
+| Doc | Content |
+|-----|---------|
+| [docs/architecture.md](docs/architecture.md) | Layers, data flow, module map |
+| [docs/development.md](docs/development.md) | Conventions, linting, extending prompts |
+| [docs/testing.md](docs/testing.md) | Pytest, manual guardrail checks |
+| [docs/security.md](docs/security.md) | Guardrails, env vars, operational notes |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker and cloud notes |
+
+---
+
+## License / author
+
+See `pyproject.toml` for project metadata. Use `.gitignore` to keep `.env` and local session data out of version control.
