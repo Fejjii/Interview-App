@@ -14,6 +14,7 @@ from typing import Any
 from interview_app.app.interview_form_config import truncate_job_description, validate_role_title
 from interview_app.llm.openai_client import LLMClient
 from interview_app.prompts.personas import get_persona_prompt
+from interview_app.prompts.prompt_strategies import evaluation_coaching_directive
 from interview_app.security.guards import GuardrailResult, protect_system_prompt
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
 from interview_app.utils.errors import safe_user_message
@@ -53,6 +54,7 @@ def evaluate_answer(
     top_p: float | None = None,
     response_language: str = "en",
     persona: str = "Hiring Manager",
+    prompt_strategy: str | None = None,
     session_state: dict[str, Any] | None = None,
     skip_session_rate_limit: bool = False,
     openai_api_key: str | None = None,
@@ -147,6 +149,7 @@ def evaluate_answer(
         _evaluator_system_prompt(
             response_language=response_language,
             persona=persona,
+            prompt_strategy=prompt_strategy,
         )
     )
     jd_text = truncate_job_description(job_description)
@@ -249,6 +252,7 @@ def _evaluator_system_prompt(
     *,
     response_language: str = "en",
     persona: str = "Hiring Manager",
+    prompt_strategy: str | None = None,
 ) -> str:
     base = (
         "You are an expert interview coach. Evaluate the candidate's answer with a focus on clarity, "
@@ -270,7 +274,13 @@ def _evaluator_system_prompt(
         "Exactly 3 follow-up questions (one per line or numbered).\n"
     )
     persona_fragment = get_persona_prompt(persona)
-    return f"{base}\n\nInterviewer tone: {persona_fragment}\n\n{language_instruction(response_language)}"
+    strategy_note = (
+        f"\n\n{evaluation_coaching_directive(prompt_strategy)}" if prompt_strategy else ""
+    )
+    return (
+        f"{base}\n\nInterviewer tone: {persona_fragment}"
+        f"{strategy_note}\n\n{language_instruction(response_language)}"
+    )
 
 
 def _evaluator_user_prompt(

@@ -1,20 +1,19 @@
 """Mock interview chat orchestration (coach turns, intent routing, LLM calls).
 
-Consumes ``UISettings`` and chat history as ``ChatMessage`` list; runs the latest
-user message through ``run_input_pipeline``, then dispatches to
-``interview_generator`` or ``answer_evaluator`` depending on greeting vs
-interview vs follow-up intent.
+Routes each user turn through a small FSM plus message classification so greetings,
+start requests, and control phrases never reach the answer evaluator. Only turns that
+answer an explicit pending interview question are scored.
 
-Outputs ``ChatTurnResult`` (assistant text plus optional ``EvaluationResult``).
-Mutates nothing directly—callers pass ``session_state`` for rate limiting.
+Mutates ``session_state`` mock keys when provided: ``ia_mock_phase``,
+``ia_mock_pending_question``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
+from interview_app.app.interview_form_config import validate_role_title
 from interview_app.app.ui_settings import UISettings
 from interview_app.llm.model_settings import get_model_config
 from interview_app.llm.openai_client import LLMClient
@@ -22,6 +21,17 @@ from interview_app.security.guards import protect_system_prompt
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
 from interview_app.services.answer_evaluator import evaluate_answer
 from interview_app.services.interview_generator import generate_questions
+from interview_app.services.mock_interview_flow import (
+    MockInterviewPhase,
+    UserMessageKind,
+    classify_user_message,
+    clear_mock_interview_runtime_state,
+    get_pending_question,
+    infer_focus_override_from_message,
+    init_mock_interview_runtime_state,
+    set_mock_state,
+    should_run_evaluation,
+)
 from interview_app.utils.errors import safe_user_message
 from interview_app.utils.interview_question_output import first_question_text_from_output
 from interview_app.utils.types import ChatMessage, EvaluationResult
@@ -35,14 +45,6 @@ class ChatTurnResult:
     evaluation: EvaluationResult | None = None
 
 
-class TurnIntent(str, Enum):
-    """Coarse intent buckets used to route each chat turn."""
-
-    START_INTERVIEW = "start_interview"
-    CONVERSATIONAL = "conversational"
-    ANSWER_INTERVIEW = "answer_interview"
-
-
 def run_turn(
     settings: UISettings,
     messages: list[ChatMessage],
@@ -53,22 +55,14 @@ def run_turn(
     """
     Run one coach turn. ``messages`` must already include the latest user message.
 
-    Routing:
-    - Empty history: prompt the user to start.
-    - No assistant messages yet: greeting, general Q&A, job context, or first question.
-    - After assistant exists: infer intent (start interview, small talk, or answer evaluation + follow-up).
-
-    Args:
-        settings: Sidebar-derived configuration (role, persona, model, etc.).
-        messages: Full transcript including the new user turn at the end.
-        session_state: Streamlit session dict for rate limiting; optional.
-
-    Returns:
-        Assistant reply text and optional structured evaluation for the last answer.
-
-    Side effects: none on ``messages``; may read rate-limit state via ``session_state``.
+    When ``session_state`` is provided, updates mock interview keys for evaluation gating.
     """
+    if session_state is not None:
+        init_mock_interview_runtime_state(session_state)
+
     if not messages:
+        if session_state is not None:
+            clear_mock_interview_runtime_state(session_state)
         return ChatTurnResult(
             assistant_message="Start the session by saying hello or asking for your first question.",
             evaluation=None,
@@ -80,7 +74,6 @@ def run_turn(
             last_user_content = m.content
             break
 
-    # Run input pipeline on the latest user message (moderation + rate limit).
     input_check = run_input_pipeline(
         last_user_content,
         field_name="chat_message",
@@ -94,26 +87,78 @@ def run_turn(
             evaluation=None,
         )
 
+    pending = get_pending_question(session_state)
+    kind = classify_user_message(last_user_content)
+
+    if kind == UserMessageKind.RESTART_REQUEST:
+        clear_mock_interview_runtime_state(session_state)
+        return _greeting_and_first_question(
+            settings,
+            messages,
+            session_state=session_state,
+            openai_api_key=openai_api_key,
+            restart_ack="Starting fresh — here's a new opening question.",
+        )
+
     assistant_count = sum(1 for m in messages if m.role == "assistant")
+
     if assistant_count == 0:
-        if _looks_like_explicit_start(last_user_content) or _looks_like_job_context(last_user_content):
-            return _generate_next_question(
+        if kind in (UserMessageKind.GREETING, UserMessageKind.START_REQUEST):
+            return _greeting_and_first_question(
+                settings,
+                messages,
+                session_state=session_state,
+                openai_api_key=openai_api_key,
+            )
+        if _looks_like_job_context(last_user_content):
+            return _generate_next_question_turn(
                 settings, messages, session_state=session_state, openai_api_key=openai_api_key
             )
-        if _looks_like_greeting(last_user_content):
-            return _reply_to_greeting(settings, last_user_content)
-        return _answer_general_question(settings, messages, last_user_content, openai_api_key=openai_api_key)
-
-    intent = _infer_follow_up_intent(last_user_content)
-    if intent is TurnIntent.START_INTERVIEW:
-        return _generate_next_question(
-            settings, messages, session_state=session_state, openai_api_key=openai_api_key
+        return _answer_general_question(
+            settings, messages, last_user_content, openai_api_key=openai_api_key
         )
-    if intent is TurnIntent.CONVERSATIONAL:
-        return _answer_general_question(settings, messages, last_user_content, openai_api_key=openai_api_key)
 
-    return _evaluate_and_follow_up(
-        settings, messages, last_user_content, session_state=session_state, openai_api_key=openai_api_key
+    if should_run_evaluation(pending_question=pending, kind=kind, user_text=last_user_content):
+        q = pending or ""
+        return _evaluate_and_follow_up(
+            settings,
+            messages,
+            last_user_content,
+            interview_question=q,
+            session_state=session_state,
+            openai_api_key=openai_api_key,
+        )
+
+    if kind == UserMessageKind.CONTROL_INSTRUCTION:
+        return _handle_control_instruction(
+            settings,
+            messages,
+            last_user_content,
+            pending_question=pending,
+            session_state=session_state,
+            openai_api_key=openai_api_key,
+        )
+
+    if kind == UserMessageKind.START_REQUEST:
+        return _generate_next_question_turn(
+            settings,
+            messages,
+            session_state=session_state,
+            openai_api_key=openai_api_key,
+        )
+
+    if pending and kind in (UserMessageKind.GREETING, UserMessageKind.CLARIFICATION):
+        return ChatTurnResult(
+            assistant_message=(
+                "We're in the middle of a question — share your answer when you're ready, "
+                "or type **repeat the question** if you need it repeated.\n\n"
+                f"**Question:** {pending}"
+            ),
+            evaluation=None,
+        )
+
+    return _answer_general_question(
+        settings, messages, last_user_content, openai_api_key=openai_api_key
     )
 
 
@@ -135,22 +180,53 @@ def _resolve_job_description_for_chat(
     return ""
 
 
-def _generate_next_question(
+def _normalize_question_text(text: str, raw_fallback: str) -> str:
+    text = (text or "").strip()
+    json_first = first_question_text_from_output(text)
+    if json_first:
+        return json_first.strip()
+    if text:
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        for line in lines:
+            if line[0:1].isdigit() and (")" in line or "." in line):
+                idx = line.find(")") if ")" in line else line.find(".")
+                if idx > 0:
+                    text = line[idx + 1 :].strip()
+                    break
+            elif not line.lower().startswith("question") and len(line) > 20:
+                text = line
+                break
+    return (text or raw_fallback).strip()
+
+
+def _generate_next_question_turn(
     settings: UISettings,
     messages: list[ChatMessage],
     *,
     session_state: dict[str, Any] | None = None,
     openai_api_key: str | None = None,
+    lead_in: str | None = None,
+    interview_focus: str | None = None,
 ) -> ChatTurnResult:
-    """Generate a single next question (first or after a follow-up)."""
+    """Generate one interview question; store canonical question text in session."""
+    ok_title, _ = validate_role_title(settings.role_title)
+    if not ok_title:
+        return ChatTurnResult(
+            assistant_message=(
+                "Please enter a **role title** in the sidebar so I can ask a realistic question."
+            ),
+            evaluation=None,
+        )
+
     job_description = _resolve_job_description_for_chat(settings, messages)
+    focus = settings.interview_focus if interview_focus is None else interview_focus
 
     result = generate_questions(
         role_category=settings.role_category,
         role_title=settings.role_title,
         seniority=settings.seniority,
         interview_round=settings.interview_round,
-        interview_focus=settings.interview_focus,
+        interview_focus=focus,
         job_description=job_description or "(none)",
         n_questions=1,
         prompt_strategy=settings.prompt_strategy,
@@ -172,77 +248,51 @@ def _generate_next_question(
             evaluation=None,
         )
 
-    text = (result.response.text or "").strip()
-    json_first = first_question_text_from_output(text)
-    if json_first:
-        return ChatTurnResult(assistant_message=json_first, evaluation=None)
-    # Extract first question if model returned a list
-    if text:
-        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        for line in lines:
-            if line[0:1].isdigit() and (")" in line or "." in line):
-                idx = line.find(")") if ")" in line else line.find(".")
-                if idx > 0:
-                    text = line[idx + 1 :].strip()
-                    break
-            elif not line.lower().startswith("question") and len(line) > 20:
-                text = line
-                break
-    return ChatTurnResult(assistant_message=text or result.response.text, evaluation=None)
-
-
-def _looks_like_greeting(text: str) -> bool:
-    """True if the first user message is a short greeting, not job context or a request to start."""
-    t = (text or "").strip().lower()
-    if len(t) > 50:
-        return False
-    greetings = (
-        "hi",
-        "hey",
-        "hello",
-        "hi there",
-        "hey there",
-        "hello there",
-        "hola",
-        "yo",
-        "sup",
-        "howdy",
+    raw = (result.response.text or "").strip()
+    question_text = _normalize_question_text(raw, raw_fallback=result.response.text or "")
+    display = f"{lead_in}\n\n{question_text}" if lead_in else question_text
+    set_mock_state(
+        session_state,
+        pending_question=question_text,
+        phase=MockInterviewPhase.AWAITING_ANSWER,
     )
-    return t in greetings or t.rstrip("!?.") in greetings
+    return ChatTurnResult(assistant_message=display, evaluation=None)
 
 
-def _reply_to_greeting(settings: UISettings, user_msg: str) -> ChatTurnResult:
-    """Return a friendly greeting and invite the user to start the interview."""
+def _greeting_and_first_question(
+    settings: UISettings,
+    messages: list[ChatMessage],
+    *,
+    session_state: dict[str, Any] | None = None,
+    openai_api_key: str | None = None,
+    restart_ack: str | None = None,
+) -> ChatTurnResult:
+    """Intro + first question in one assistant turn (intro does not become the graded 'question')."""
+    ok_title, _ = validate_role_title(settings.role_title)
+    if not ok_title:
+        return ChatTurnResult(
+            assistant_message=(
+                "Hi! Set a **role title** in the sidebar to begin — then say hello or **Let's start** "
+                "for your first question."
+            ),
+            evaluation=None,
+        )
     role = (settings.role_title or "").strip() or "your target"
-    return ChatTurnResult(
-        assistant_message=(
+    if restart_ack:
+        lead = f"{restart_ack}\n\nI'm your AI interview coach for **{role}** practice. Here's your next question."
+    else:
+        lead = (
             f"Hi — I'm your AI interview coach for **{role}** practice. "
-            "When you're ready, say something like *\"Let's start\"* or *\"I'm ready\"* and I'll ask your first question."
-        ),
-        evaluation=None,
+            "I'll ask targeted questions based on your sidebar setup. Here's your first question."
+        )
+    return _generate_next_question_turn(
+        settings,
+        messages,
+        session_state=session_state,
+        openai_api_key=openai_api_key,
+        lead_in=lead,
+        interview_focus=settings.interview_focus,
     )
-
-
-def _looks_like_explicit_start(text: str) -> bool:
-    """True when the user clearly asks to begin or continue interview mode."""
-    t = (text or "").strip().lower()
-    if not t:
-        return False
-    start_phrases = (
-        "let's start",
-        "lets start",
-        "start interview",
-        "start the interview",
-        "begin interview",
-        "i'm ready",
-        "im ready",
-        "ready to start",
-        "next question",
-        "ask me a question",
-        "continue interview",
-        "continue the interview",
-    )
-    return any(phrase in t for phrase in start_phrases)
 
 
 def _looks_like_job_context(text: str) -> bool:
@@ -254,94 +304,36 @@ def _looks_like_job_context(text: str) -> bool:
     return any(c in t for c in cues)
 
 
-def _looks_like_general_question(text: str) -> bool:
-    """True if the user message looks like a general/social question rather than an interview answer."""
-    import re
-    t = (text or "").strip()
-    if len(t) > 400:
-        return False
-    # Normalize whitespace for matching
-    t_norm = re.sub(r"\s+", " ", t.lower())
-    # Question-style phrases
-    question_starts = (
-        "tell me ",
-        "what is ",
-        "what are ",
-        "how does ",
-        "how do ",
-        "why ",
-        "explain ",
-        "can you ",
-        "could you ",
-        "tell me more ",
-        "when ",
-        "where ",
-        "who ",
+def _handle_control_instruction(
+    settings: UISettings,
+    messages: list[ChatMessage],
+    last_user_content: str,
+    *,
+    pending_question: str | None,
+    session_state: dict[str, Any] | None,
+    openai_api_key: str | None = None,
+) -> ChatTurnResult:
+    """Repeat, focus switch, or fresh question — never triggers evaluation."""
+    t = (last_user_content or "").strip().lower()
+    if pending_question and any(
+        p in t for p in ("repeat the question", "say the question again", "repeat question")
+    ):
+        return ChatTurnResult(
+            assistant_message=f"Of course — here it is again:\n\n**Question:** {pending_question}",
+            evaluation=None,
+        )
+
+    override = infer_focus_override_from_message(last_user_content)
+    ack_focus = override or settings.interview_focus
+    ack = f"Absolutely — I'll emphasize **{ack_focus}** in the next question."
+    return _generate_next_question_turn(
+        settings,
+        messages,
+        session_state=session_state,
+        openai_api_key=openai_api_key,
+        lead_in=ack,
+        interview_focus=override if override is not None else settings.interview_focus,
     )
-    if t_norm.endswith("?") or any(t_norm.startswith(s) for s in question_starts):
-        return True
-    if "?" in t and len(t) < 150:
-        return True
-    # Social/courtesy phrases - treat as conversation, not interview answer.
-    social_phrases = (
-        "how are you",
-        "how are you doing",
-        "how's it going",
-        "how are things",
-        "what's up",
-        "whats up",
-        "how do you do",
-        "how have you been",
-        "how's everything",
-        "how's your day",
-        "how's your day going",
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "good night",
-        "how are ya",
-        "how ya doing",
-    )
-    if any(p in t_norm for p in social_phrases):
-        return True
-    # Very short utterances are usually conversational, not evaluable answers.
-    if len(t_norm.split()) <= 5:
-        return True
-    return False
-
-
-def _looks_like_interview_answer(text: str) -> bool:
-    """Heuristic for candidate-style answers to a previous interview question."""
-    t = (text or "").strip().lower()
-    words = t.split()
-    if len(words) >= 20 and "?" not in t:
-        return True
-    evidence_markers = (
-        "i built",
-        "i designed",
-        "i implemented",
-        "in my",
-        "for example",
-        "we used",
-        "we implemented",
-        "the trade-off",
-        "the approach",
-    )
-    if len(words) >= 10 and any(marker in t for marker in evidence_markers):
-        return True
-    return False
-
-
-def _infer_follow_up_intent(last_user_content: str) -> TurnIntent:
-    """Infer whether the latest user turn should start/continue interview, discuss, or be graded."""
-    if _looks_like_explicit_start(last_user_content):
-        return TurnIntent.START_INTERVIEW
-    if _looks_like_general_question(last_user_content):
-        return TurnIntent.CONVERSATIONAL
-    if _looks_like_interview_answer(last_user_content):
-        return TurnIntent.ANSWER_INTERVIEW
-    # Safer default: if unsure, keep conversation flowing instead of grading random text.
-    return TurnIntent.CONVERSATIONAL
 
 
 def _answer_general_question(
@@ -402,17 +394,11 @@ def _evaluate_and_follow_up(
     messages: list[ChatMessage],
     last_user_content: str,
     *,
+    interview_question: str,
     session_state: dict[str, Any] | None = None,
     openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """Evaluate the user's answer and return feedback plus one follow-up question."""
-    # Find the last assistant message (the question the user answered)
-    last_question = ""
-    for m in reversed(messages):
-        if m.role == "assistant":
-            last_question = m.content
-            break
-
     eval_result = evaluate_answer(
         role_category=settings.role_category,
         role_title=settings.role_title,
@@ -421,7 +407,7 @@ def _evaluate_and_follow_up(
         interview_focus=settings.interview_focus,
         effective_difficulty=settings.effective_question_difficulty,
         job_description=settings.job_description,
-        question=last_question,
+        question=interview_question,
         answer=last_user_content,
         model=settings.model_preset,
         temperature=settings.temperature,
@@ -429,6 +415,7 @@ def _evaluate_and_follow_up(
         max_tokens=settings.max_tokens,
         response_language=settings.response_language,
         persona=settings.persona,
+        prompt_strategy=settings.prompt_strategy,
         session_state=session_state,
         skip_session_rate_limit=True,
         openai_api_key=openai_api_key,
@@ -442,6 +429,7 @@ def _evaluate_and_follow_up(
 
     parts = []
     ev = eval_result.evaluation
+    next_pending: str | None = None
     if ev:
         parts.append(f"**Score: {ev.score}/10**")
         if ev.criteria_met:
@@ -456,11 +444,18 @@ def _evaluate_and_follow_up(
             parts.append(f"**Critique:** {ev.critique[:300]}{'…' if len(ev.critique) > 300 else ''}")
         if ev.follow_ups:
             follow_up = ev.follow_ups[0]
+            next_pending = follow_up.strip() or None
             parts.append("")
             parts.append("**Follow-up:**")
             parts.append(follow_up)
     else:
         parts.append(eval_result.response.text or "Evaluation complete. Ready for the next question when you are.")
+
+    set_mock_state(
+        session_state,
+        pending_question=next_pending,
+        phase=MockInterviewPhase.AWAITING_ANSWER if next_pending else MockInterviewPhase.NOT_STARTED,
+    )
 
     return ChatTurnResult(
         assistant_message="\n\n".join(parts),

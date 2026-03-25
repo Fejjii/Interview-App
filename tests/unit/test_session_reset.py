@@ -28,6 +28,8 @@ def test_reset_clears_chat_cv_compare_and_byo_keys() -> None:
         "current_session_id": "sid",
         "session_meta": {},
         "ia_compare_pair": {"x": 1},
+        "ia_mock_pending_question": "Old question?",
+        "ia_mock_phase": "awaiting_answer",
         KEY_USAGE_MODE: UsageMode.BYO.value,
         KEY_BYO_OPENAI_API_KEY: "sk-12345678901234567890123456789012",
         KEY_BYO_KEY_HINT: "sk-...9012",
@@ -38,6 +40,8 @@ def test_reset_clears_chat_cv_compare_and_byo_keys() -> None:
     assert ss.get("messages") == []
     assert ss.get("current_session_id") is None
     assert ss.get("ia_compare_pair") is None
+    assert ss.get("ia_mock_pending_question") is None
+    assert ss.get("ia_mock_phase") == "not_started"
     assert cvs.analysis_ready(ss) is False
     assert KEY_USAGE_MODE not in ss
     assert KEY_BYO_OPENAI_API_KEY not in ss

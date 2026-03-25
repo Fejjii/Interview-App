@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from interview_app.app import cv_session_state as cvs
+from interview_app.services.mock_interview_flow import clear_mock_interview_runtime_state
 from interview_app.app.usage_mode import (
     KEY_BYO_KEY_HINT,
     KEY_BYO_OPENAI_API_KEY,
@@ -79,6 +80,7 @@ def reset_all_workspace_state(session_state: dict[str, Any]) -> None:
     session_state["last_scores"] = []
     session_state["current_session_id"] = None
     session_state["session_meta"] = None
+    clear_mock_interview_runtime_state(session_state)
     session_state["response_language"] = None
     session_state["ia_pending_generate"] = False
     session_state.pop("ia_compare_pair", None)

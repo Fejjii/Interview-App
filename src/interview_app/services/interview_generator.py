@@ -145,6 +145,7 @@ def generate_questions(
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p,
+            api_key=openai_api_key,
         )
         resp = client.generate_response(
             system_prompt=system_prompt,

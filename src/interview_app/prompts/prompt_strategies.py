@@ -313,3 +313,38 @@ def _normalize_block(text: str) -> str:
 
 def _format_template(template: str, **kwargs: object) -> str:
     return template.format(**kwargs)
+
+
+def evaluation_coaching_directive(prompt_strategy: str) -> str:
+    """
+    Brief instruction aligned with the active prompt strategy for mock-interview evaluation.
+
+    Used only in mock interview (answer feedback tab keeps its own fixed coach prompt).
+    """
+    key = prompt_strategy if prompt_strategy in {
+        "zero_shot",
+        "few_shot",
+        "chain_of_thought",
+        "structured_output",
+        "role_based",
+    } else "zero_shot"
+    directives: dict[str, str] = {
+        "zero_shot": (
+            "Coaching style: zero-shot — be direct, structured, and concise; avoid lengthy preamble."
+        ),
+        "few_shot": (
+            "Coaching style: few-shot — anchor feedback to concrete patterns and short illustrative examples."
+        ),
+        "chain_of_thought": (
+            "Coaching style: chain-of-thought — reason privately about gaps vs. role expectations, "
+            "then output only the required sectioned feedback (no visible chain-of-thought)."
+        ),
+        "structured_output": (
+            "Coaching style: structured output — keep section headers exactly as requested; "
+            "prefer scannable bullets over prose walls."
+        ),
+        "role_based": (
+            "Coaching style: role-based — stay consistent with the interviewer persona and hiring context."
+        ),
+    }
+    return directives[key]

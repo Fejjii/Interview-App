@@ -12,6 +12,11 @@ from __future__ import annotations
 import streamlit as st
 
 from interview_app.app.ui_settings import UISettings
+from interview_app.services.mock_interview_flow import (
+    clear_mock_interview_runtime_state,
+    init_mock_interview_runtime_state,
+    sync_mock_interview_session_from_messages,
+)
 from interview_app.utils.types import ChatMessage, SessionMeta
 
 
@@ -29,6 +34,7 @@ def init_session_state() -> None:
         st.session_state.last_scores = []  # for adaptive difficulty
     if "ia_pending_generate" not in st.session_state:
         st.session_state.ia_pending_generate = False
+    init_mock_interview_runtime_state(st.session_state)
 
 
 def get_messages() -> list[ChatMessage]:
@@ -57,6 +63,7 @@ def clear_messages() -> None:
     init_session_state()
     st.session_state.messages = []
     st.session_state.last_scores = []
+    clear_mock_interview_runtime_state(st.session_state)
 
 
 def snapshot_meta_from_settings(settings: UISettings, session_id: str | None, title: str = "") -> SessionMeta:
@@ -84,9 +91,9 @@ def load_session_into_state(session_id: str, meta: SessionMeta, messages: list[d
     init_session_state()
     st.session_state.current_session_id = session_id
     st.session_state.session_meta = meta
-    st.session_state.messages = [
-        ChatMessage(role=m.get("role", "user"), content=m.get("content", "")) for m in messages
-    ]
+    loaded = [ChatMessage(role=m.get("role", "user"), content=m.get("content", "")) for m in messages]
+    st.session_state.messages = loaded
+    sync_mock_interview_session_from_messages(st.session_state, loaded)
 
 
 def messages_for_llm(messages: list[ChatMessage], last_n: int = 10) -> list[dict]:

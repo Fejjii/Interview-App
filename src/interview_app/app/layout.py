@@ -241,7 +241,7 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
                 result = chat_run_turn(
                     settings,
                     updated,
-                    session_state=dict(st.session_state),
+                    session_state=st.session_state,
                     openai_api_key=_session_openai_key(),
                 )
                 append_message("assistant", result.assistant_message)
