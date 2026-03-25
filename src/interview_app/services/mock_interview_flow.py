@@ -1,7 +1,8 @@
-"""Mock interview conversation state and user-turn classification.
+"""Mock interview: explicit state machine, turn classification, and topic memory.
 
-Tracks whether a real interview question is pending and classifies user text so
-starters and controls are never sent to the answer evaluator.
+Turn classification and interview state are enforced in Python so clarification / meta
+turns are never scored; evaluation runs only in ``WAITING_FOR_ANSWER`` when the turn
+is classified as a substantive answer.
 """
 
 from __future__ import annotations
@@ -16,10 +17,35 @@ from interview_app.utils.types import ChatMessage
 # Streamlit / in-memory session keys (also used with plain dicts in tests).
 KEY_MOCK_PHASE = "ia_mock_phase"
 KEY_PENDING_QUESTION = "ia_mock_pending_question"
+KEY_INTERVIEW_STATE = "ia_interview_state"
+KEY_CANDIDATE_TOPICS = "ia_candidate_topics"
+
+
+class InterviewState(str, Enum):
+    """Explicit interview FSM state persisted in session (mock interview only)."""
+
+    GREETING = "greeting"
+    ASKING_QUESTION = "asking_question"
+    WAITING_FOR_ANSWER = "waiting_for_answer"
+    EVALUATING_ANSWER = "evaluating_answer"
+    ASKING_FOLLOW_UP = "asking_follow_up"
+    META_CONVERSATION = "meta_conversation"
+
+
+class UserTurnType(str, Enum):
+    """Semantic type of the user's latest message (mock interview routing)."""
+
+    GREETING = "greeting"
+    ANSWER = "answer"
+    CLARIFICATION = "clarification"
+    META = "meta"
+    EXPERIENCE = "experience"
+    CONTROL = "control"
+    OTHER = "other"
 
 
 class MockInterviewPhase(str, Enum):
-    """High-level mock interview progress (persisted in session)."""
+    """Legacy phase labels (kept for session sync and backward compatibility)."""
 
     NOT_STARTED = "not_started"
     INTERVIEW_STARTED = "interview_started"
@@ -30,7 +56,7 @@ class MockInterviewPhase(str, Enum):
 
 
 class UserMessageKind(str, Enum):
-    """Classification for the latest user message in mock interview."""
+    """Legacy classification (maps from ``UserTurnType`` for older call sites)."""
 
     GREETING = "greeting"
     START_REQUEST = "start_request"
@@ -41,19 +67,199 @@ class UserMessageKind(str, Enum):
     OTHER = "other"
 
 
+_TECH_LEXICON: frozenset[str] = frozenset(
+    {
+        "snowflake",
+        "bigquery",
+        "redshift",
+        "databricks",
+        "dbt",
+        "airflow",
+        "prefect",
+        "dagster",
+        "kafka",
+        "pubsub",
+        "kinesis",
+        "spark",
+        "flink",
+        "kubernetes",
+        "docker",
+        "terraform",
+        "ansible",
+        "redis",
+        "memcached",
+        "postgres",
+        "postgresql",
+        "mysql",
+        "mongodb",
+        "elasticsearch",
+        "graphql",
+        "rest",
+        "grpc",
+        "microservices",
+        "lambda",
+        "ci",
+        "cd",
+        "github",
+        "gitlab",
+        "jupyter",
+        "mlflow",
+        "tensorflow",
+        "pytorch",
+        "pandas",
+        "numpy",
+        "etl",
+        "elt",
+        "cdc",
+        "olap",
+        "oltp",
+        "incremental",
+        "scd",
+        "slowly",
+        "dim",
+        "fact",
+        "star",
+        "schema",
+        "normalization",
+        "denormalization",
+        "partitioning",
+        "sharding",
+        "replication",
+        "backpressure",
+        "observability",
+        "prometheus",
+        "grafana",
+        "datadog",
+        "opentelemetry",
+        "sla",
+        "slo",
+        "sdlc",
+    }
+)
+
+_READY_PHRASES: tuple[str, ...] = (
+    "let's start",
+    "lets start",
+    "start interview",
+    "start the interview",
+    "start a mock interview",
+    "begin interview",
+    "begin the interview",
+    "i'm ready",
+    "im ready",
+    "i am ready",
+    "ready to start",
+    "ready for the interview",
+    "ready for interview",
+    "ready to begin",
+    "let's begin",
+    "lets begin",
+    "next question",
+    "ask me a question",
+    "ask the first question",
+    "another question",
+    "different question",
+    "new question",
+    "continue interview",
+    "continue the interview",
+    "kick off",
+)
+
+_CLARIFICATION_PHRASES: tuple[str, ...] = (
+    "what do you mean",
+    "can you clarify",
+    "could you clarify",
+    "clarify if",
+    "before i answer",
+    "before answering",
+    "i don't understand",
+    "dont understand",
+    "unclear",
+    "explain that",
+    "say more about",
+    "is this interview",
+    "is the interview",
+    "more theoretical",
+    "more practical",
+)
+
+_META_PHRASES: tuple[str, ...] = (
+    "how long",
+    "how much time",
+    "what is this",
+    "how does this work",
+    "what format",
+    "are you ai",
+    "are you a bot",
+    "pause",
+    "take a break",
+)
+
+_EXPERIENCE_DIGRESSION_MARKERS: tuple[str, ...] = (
+    "off topic",
+    "unrelated",
+    "by the way",
+    "random story",
+    "not really answering",
+    "before we go on",
+    "sidebar",
+)
+
+
 def clear_mock_interview_runtime_state(session_state: MutableMapping[str, Any] | None) -> None:
-    """Reset FSM keys (no-op if session_state is None)."""
+    """Reset mock interview keys (no-op if session_state is None)."""
     if session_state is None:
         return
     session_state[KEY_MOCK_PHASE] = MockInterviewPhase.NOT_STARTED.value
     session_state[KEY_PENDING_QUESTION] = None
+    session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
+    session_state[KEY_CANDIDATE_TOPICS] = []
 
 
 def init_mock_interview_runtime_state(session_state: MutableMapping[str, Any]) -> None:
-    """Ensure keys exist (idempotent)."""
+    """Ensure keys exist (idempotent). Migrates legacy phase → interview state once."""
     session_state.setdefault(KEY_MOCK_PHASE, MockInterviewPhase.NOT_STARTED.value)
     if KEY_PENDING_QUESTION not in session_state:
         session_state[KEY_PENDING_QUESTION] = None
+    if KEY_INTERVIEW_STATE not in session_state:
+        phase = str(session_state.get(KEY_MOCK_PHASE) or "")
+        pq = session_state.get(KEY_PENDING_QUESTION)
+        if pq and str(pq).strip():
+            session_state[KEY_INTERVIEW_STATE] = InterviewState.WAITING_FOR_ANSWER.value
+        elif phase == MockInterviewPhase.AWAITING_ANSWER.value:
+            session_state[KEY_INTERVIEW_STATE] = InterviewState.WAITING_FOR_ANSWER.value
+        else:
+            session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
+    session_state.setdefault(KEY_CANDIDATE_TOPICS, [])
+
+
+def get_interview_state(session_state: MutableMapping[str, Any] | None) -> InterviewState:
+    """Resolved FSM state from session (never raises)."""
+    if not session_state:
+        return InterviewState.GREETING
+    pq = session_state.get(KEY_PENDING_QUESTION)
+    has_pending = bool(pq and str(pq).strip())
+    raw = session_state.get(KEY_INTERVIEW_STATE)
+    if raw:
+        try:
+            st = InterviewState(str(raw))
+            if st == InterviewState.GREETING and has_pending:
+                return InterviewState.WAITING_FOR_ANSWER
+            return st
+        except ValueError:
+            pass
+    if has_pending:
+        return InterviewState.WAITING_FOR_ANSWER
+    phase = str(session_state.get(KEY_MOCK_PHASE) or "")
+    if phase == MockInterviewPhase.AWAITING_ANSWER.value:
+        return InterviewState.WAITING_FOR_ANSWER
+    return InterviewState.GREETING
+
+
+def set_interview_state(session_state: MutableMapping[str, Any] | None, state: InterviewState) -> None:
+    if session_state is None:
+        return
+    session_state[KEY_INTERVIEW_STATE] = state.value
 
 
 def get_pending_question(session_state: MutableMapping[str, Any] | None) -> str | None:
@@ -66,24 +272,67 @@ def get_pending_question(session_state: MutableMapping[str, Any] | None) -> str 
     return s or None
 
 
+def get_candidate_topics(session_state: MutableMapping[str, Any] | None) -> list[str]:
+    if not session_state:
+        return []
+    raw = session_state.get(KEY_CANDIDATE_TOPICS)
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return []
+
+
+def append_candidate_topics(
+    session_state: MutableMapping[str, Any] | None,
+    new_topics: list[str],
+    *,
+    cap: int = 30,
+) -> None:
+    """Merge unique topics (case-insensitive), newest last, bounded list."""
+    if session_state is None:
+        return
+    existing = get_candidate_topics(session_state)
+    seen = {x.lower() for x in existing}
+    for t in new_topics:
+        tl = (t or "").strip()
+        if len(tl) < 2:
+            continue
+        key = tl.lower()
+        if key not in seen:
+            existing.append(tl)
+            seen.add(key)
+    session_state[KEY_CANDIDATE_TOPICS] = existing[-cap:]
+
+
 def set_mock_state(
     session_state: MutableMapping[str, Any] | None,
     *,
     pending_question: str | None,
     phase: MockInterviewPhase,
+    interview_state: InterviewState | None = None,
 ) -> None:
     if session_state is None:
         return
     session_state[KEY_PENDING_QUESTION] = pending_question
     session_state[KEY_MOCK_PHASE] = phase.value
+    if interview_state is not None:
+        session_state[KEY_INTERVIEW_STATE] = interview_state.value
+    else:
+        if pending_question and str(pending_question).strip():
+            session_state[KEY_INTERVIEW_STATE] = InterviewState.WAITING_FOR_ANSWER.value
+        elif phase == MockInterviewPhase.FEEDBACK_GIVEN:
+            session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
+        elif phase == MockInterviewPhase.NOT_STARTED:
+            session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
 
 
 def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip().lower())
 
 
-def _is_greeting(t: str) -> bool:
-    if len(t) > 60:
+def _is_greeting_only(t: str) -> bool:
+    if len(t) > 80:
         return False
     greetings = (
         "hi",
@@ -117,44 +366,93 @@ def _is_restart_request(t: str) -> bool:
     return any(p in t for p in phrases)
 
 
-def _is_start_request(t: str) -> bool:
-    phrases = (
-        "let's start",
-        "lets start",
-        "start interview",
-        "start the interview",
-        "start a mock interview",
-        "mock interview",
-        "begin interview",
-        "i'm ready",
-        "im ready",
-        "ready to start",
-        "next question",
-        "ask me a question",
-        "ask the first question",
-        "first question",
-        "continue interview",
-        "continue the interview",
+def _is_ready_or_start(t: str) -> bool:
+    if "mock interview" in t and len(t) < 120:
+        return True
+    if any(p in t for p in _READY_PHRASES):
+        return True
+    if _combined_greeting_ready(t):
+        return True
+    return False
+
+
+def _combined_greeting_ready(t: str) -> bool:
+    if len(t) > 160:
+        return False
+    tl = t.lower()
+    greeting_hit = any(
+        g in tl
+        for g in (
+            "hello",
+            "hi ",
+            "hi,",
+            "hey",
+            "good morning",
+            "good afternoon",
+        )
     )
-    return any(p in t for p in phrases)
+    ready_hit = any(w in tl for w in ("ready", "begin", "start", "kick off"))
+    return greeting_hit and ready_hit
 
 
-def _is_clarification(t: str) -> bool:
+def _is_clarification(t: str, original: str) -> bool:
+    if any(p in t for p in _CLARIFICATION_PHRASES):
+        return True
+    tl = (original or "").strip().lower()
+    if "clarify" in tl or "clarification" in tl:
+        return True
+    if "?" in original and any(
+        s in t
+        for s in (
+            "can you",
+            "could you",
+            "would you",
+            "is this",
+            "are we",
+            "should i",
+        )
+    ):
+        if len(t.split()) < 35:
+            return True
+    return False
+
+
+def _is_meta(t: str, original: str) -> bool:
+    if any(p in t for p in _META_PHRASES):
+        return True
+    tnorm = _norm(original)
+    if any(p in tnorm for p in ("thank you", "thanks", "appreciate it")) and len(tnorm.split()) < 12:
+        return True
+    if tnorm in ("ok", "okay", "k", "sure", "got it", "sounds good", "understood"):
+        return True
+    question_starts = (
+        "tell me about the app",
+        "what can you do",
+    )
+    if any(tnorm.startswith(s) for s in question_starts):
+        return True
+    return False
+
+
+def _wants_fresh_question(t: str) -> bool:
+    """User asks to move on / replace the current question (not an answer)."""
+    if len(t.split()) > 14:
+        return False
     phrases = (
-        "what do you mean",
-        "can you clarify",
-        "i don't understand",
-        "dont understand",
-        "unclear",
-        "explain that",
-        "say more about",
+        "next question",
+        "another question",
+        "different question",
+        "new question",
+        "skip this question",
+        "skip the question",
+        "skip this",
+        "move on",
+        "ask something else",
     )
     return any(p in t for p in phrases)
 
 
 def _is_control_instruction(t: str) -> bool:
-    if _is_restart_request(t):
-        return False
     phrases = (
         "switch to ",
         "change to ",
@@ -162,40 +460,25 @@ def _is_control_instruction(t: str) -> bool:
         "let's focus",
         "lets focus",
         "only ask",
-        "more behavioral",
-        "more technical",
         "repeat the question",
         "say the question again",
-        "ask a different",
-        "another question",
         "skip this",
         "skip that",
-        "new question",
-        "different question",
         "can we switch",
         "could we switch",
     )
     return any(p in t for p in phrases)
 
 
-def classify_user_message(text: str) -> UserMessageKind:
-    """Classify the user's latest mock-interview message."""
-    t = _norm(text)
-    if not t:
-        return UserMessageKind.OTHER
-    if _is_restart_request(t):
-        return UserMessageKind.RESTART_REQUEST
-    if _is_greeting(t):
-        return UserMessageKind.GREETING
-    if _is_start_request(t):
-        return UserMessageKind.START_REQUEST
-    if _is_clarification(t):
-        return UserMessageKind.CLARIFICATION
-    if _is_control_instruction(t):
-        return UserMessageKind.CONTROL_INSTRUCTION
-    if _looks_like_interview_answer(text):
-        return UserMessageKind.CANDIDATE_ANSWER
-    return UserMessageKind.OTHER
+def _looks_like_experience_digression(t: str, original: str, pending: str | None) -> bool:
+    if not pending:
+        return False
+    if any(m in t for m in _EXPERIENCE_DIGRESSION_MARKERS):
+        return True
+    if "in my last role" in t or "in my previous role" in t:
+        if "?" not in original and len(original.split()) < 25 and not _looks_like_interview_answer(original):
+            return True
+    return False
 
 
 def _looks_like_interview_answer(text: str) -> bool:
@@ -215,6 +498,9 @@ def _looks_like_interview_answer(text: str) -> bool:
         "the approach",
         "i would",
         "i'd approach",
+        "because",
+        "therefore",
+        "we chose",
     )
     if len(words) >= 10 and any(marker in t for marker in evidence_markers):
         return True
@@ -222,7 +508,7 @@ def _looks_like_interview_answer(text: str) -> bool:
 
 
 def _looks_like_general_question(text: str) -> bool:
-    """True if the user message is small talk or a meta-question, not an answer."""
+    """Small talk or a meta question, not a substantive interview answer."""
     t = (text or "").strip()
     if len(t) > 400:
         return False
@@ -237,7 +523,6 @@ def _looks_like_general_question(text: str) -> bool:
         "explain ",
         "can you ",
         "could you ",
-        "tell me more ",
         "when ",
         "where ",
         "who ",
@@ -250,11 +535,6 @@ def _looks_like_general_question(text: str) -> bool:
         "how are you",
         "how's it going",
         "what's up",
-        "thanks",
-        "thank you",
-        "ok",
-        "okay",
-        "sounds good",
     )
     if any(p in t_norm for p in social_phrases):
         return True
@@ -263,17 +543,230 @@ def _looks_like_general_question(text: str) -> bool:
     return False
 
 
+def detect_user_turn_type(message: str, *, pending_question: str | None = None) -> UserTurnType:
+    """
+    Classify the user's message for mock-interview routing.
+
+    When a question is pending, clarification and meta turns must not be treated as answers.
+    """
+    t = _norm(message)
+    if not t:
+        return UserTurnType.OTHER
+    if _is_restart_request(t):
+        return UserTurnType.OTHER  # handled in chat_service via ``user_requests_restart`` before routing
+    if _is_control_instruction(t):
+        return UserTurnType.CONTROL
+    if pending_question and _is_clarification(t, message):
+        return UserTurnType.CLARIFICATION
+    if pending_question and _is_meta(t, message):
+        return UserTurnType.META
+    if pending_question and _wants_fresh_question(t):
+        return UserTurnType.CONTROL
+    if not pending_question and _is_ready_or_start(t):
+        return UserTurnType.GREETING
+    if not pending_question and _is_greeting_only(t):
+        return UserTurnType.GREETING
+    if pending_question and _looks_like_experience_digression(t, message, pending_question):
+        return UserTurnType.EXPERIENCE
+    if pending_question:
+        if _looks_like_interview_answer(message):
+            return UserTurnType.ANSWER
+        if len(t.split()) >= 12 and not _looks_like_general_question(message):
+            return UserTurnType.ANSWER
+        if _looks_like_general_question(message):
+            if "?" in message:
+                return UserTurnType.CLARIFICATION
+            return UserTurnType.META
+        return UserTurnType.OTHER
+    if _looks_like_job_context(message):
+        return UserTurnType.OTHER
+    return UserTurnType.OTHER
+
+
+def should_evaluate(turn_type: UserTurnType, interview_state: InterviewState) -> bool:
+    """
+    Evaluation is allowed only while waiting for an answer and the turn is graded as an answer.
+
+    Caller must still ensure a non-empty pending question before running the evaluator.
+    """
+    if interview_state != InterviewState.WAITING_FOR_ANSWER:
+        return False
+    return turn_type == UserTurnType.ANSWER
+
+
+def should_run_full_evaluation(
+    *,
+    pending_question: str | None,
+    turn_type: UserTurnType,
+    interview_state: InterviewState,
+    user_text: str,
+) -> bool:
+    """Whether to invoke the answer evaluator (pending Q + FSM + turn type + length guard)."""
+    if not (pending_question and pending_question.strip()):
+        return False
+    if not should_evaluate(turn_type, interview_state):
+        return False
+    words = _norm(user_text).split()
+    if len(words) < 8:
+        return False
+    return True
+
+
+def extract_candidate_topics(message: str, max_topics: int = 14) -> list[str]:
+    """
+    Lightweight topic extraction for contextual follow-ups (technologies, tools, themes).
+
+    Complements the model: deterministic hints improve reliability for names like Snowflake/dbt.
+    """
+    raw = message or ""
+    topics: list[str] = []
+    seen: set[str] = set()
+
+    def add(term: str) -> None:
+        tl = term.strip()
+        if len(tl) < 2:
+            return
+        k = tl.lower()
+        if k in seen:
+            return
+        seen.add(k)
+        topics.append(tl)
+        if len(topics) >= max_topics:
+            return
+
+    for m in re.finditer(r"\"([^\"]{2,64})\"|'([^']{2,64})'", raw):
+        chunk = (m.group(1) or m.group(2) or "").strip()
+        if chunk:
+            add(chunk)
+
+    for m in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b", raw):
+        chunk = m.group(1).strip()
+        if chunk.lower() not in {"i", "we", "the", "a", "an"} and len(chunk) > 2:
+            add(chunk)
+
+    lowered = _norm(raw)
+    tokens = re.split(r"[^\w+.#-]+", lowered)
+    multi = (
+        "incremental model",
+        "data quality",
+        "late arriving",
+        "slowly changing",
+        "star schema",
+        "event driven",
+        "machine learning",
+        "unit test",
+        "integration test",
+    )
+    for phrase in multi:
+        if phrase in lowered:
+            add(phrase.title())
+
+    for tok in tokens:
+        if tok in _TECH_LEXICON:
+            add(tok.upper() if tok in {"etl", "elt", "cdc", "sla", "slo", "ci", "cd"} else tok)
+
+    return topics[:max_topics]
+
+
+def generate_contextual_follow_up_hints(
+    topics: list[str],
+    *,
+    role: str,
+    seniority: str,
+    focus: str,
+) -> str:
+    """Build a short instruction block for the evaluator to anchor the next question."""
+    if not topics:
+        return ""
+    tail = ", ".join(topics[:8])
+    return (
+        f"Candidate mentioned these concrete topics: {tail}. "
+        f"The next follow-up MUST drill into one or more of them (implementation, trade-offs, "
+        f"failure modes, validation, or production operations) for a **{seniority}** **{role}** "
+        f"candidate; interview focus: **{focus}**."
+    )
+
+
+def build_interviewer_prompt(
+    persona: str,
+    *,
+    interview_round: str,
+    focus: str,
+    role_title: str,
+    seniority: str,
+    pending_question: str | None,
+    candidate_topics: list[str],
+) -> str:
+    """System prompt for clarification / meta turns (in-character interviewer, not coach)."""
+    from interview_app.prompts.personas import get_persona_interviewer_behavior
+
+    ctx = ""
+    if candidate_topics:
+        ctx = f"\nTopics the candidate has mentioned so far: {', '.join(candidate_topics[-12:])}."
+    pending = (
+        f"\nThe current interview question (if they ask about it): {pending_question}"
+        if pending_question
+        else ""
+    )
+    return (
+        f"{get_persona_interviewer_behavior(persona)}\n\n"
+        f"Interview round: {interview_round}. Focus: {focus}. "
+        f"Role: {role_title} ({seniority}).{ctx}{pending}\n\n"
+        "You are in a live mock interview. The candidate sent a clarification or meta message — "
+        "answer naturally in 2–6 short sentences. Do NOT score them. Do NOT ask a new main "
+        "question unless they explicitly request the next question. "
+        "If they asked about interview format, explain briefly: one question at a time, brief "
+        "feedback after answers, then a follow-up. Remind them to answer the pending question when ready."
+    )
+
+
+def _looks_like_job_context(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if len(t.split()) < 8:
+        return False
+    cues = ("job description", "role:", "position:", "responsibilities", "requirements", "hiring", "company")
+    return any(c in t for c in cues)
+
+
+def _turn_type_to_message_kind(text: str, tt: UserTurnType) -> UserMessageKind:
+    """Map new turn types to legacy ``UserMessageKind`` (tests and older helpers)."""
+    if tt == UserTurnType.CONTROL:
+        return UserMessageKind.CONTROL_INSTRUCTION
+    if tt == UserTurnType.CLARIFICATION:
+        return UserMessageKind.CLARIFICATION
+    if tt == UserTurnType.ANSWER:
+        return UserMessageKind.CANDIDATE_ANSWER
+    if tt == UserTurnType.GREETING:
+        if _is_ready_or_start(_norm(text)):
+            return UserMessageKind.START_REQUEST
+        return UserMessageKind.GREETING
+    return UserMessageKind.OTHER
+
+
+def user_requests_restart(message: str) -> bool:
+    """True when the user asked to reset the mock interview conversation."""
+    return bool((message or "").strip()) and _is_restart_request(_norm(message))
+
+
+def classify_user_message(text: str, *, pending_question: str | None = None) -> UserMessageKind:
+    """Legacy classifier; prefer ``detect_user_turn_type`` in new code."""
+    if user_requests_restart(text):
+        return UserMessageKind.RESTART_REQUEST
+    tt = detect_user_turn_type(text, pending_question=pending_question)
+    return _turn_type_to_message_kind(text, tt)
+
+
 def should_run_evaluation(
     *,
     pending_question: str | None,
     kind: UserMessageKind,
     user_text: str,
+    interview_state: InterviewState | None = None,
 ) -> bool:
     """
-    Evaluation only when a real question is pending and the user turn is an answer.
-
-    Starters, controls, greetings, and clarifications never evaluate.
+    Legacy evaluation gate (unit tests). Prefer ``should_run_full_evaluation`` with ``UserTurnType``.
     """
+    state = interview_state or InterviewState.WAITING_FOR_ANSWER
     if not (pending_question and pending_question.strip()):
         return False
     if kind in {
@@ -284,23 +777,21 @@ def should_run_evaluation(
         UserMessageKind.RESTART_REQUEST,
     }:
         return False
+    if state != InterviewState.WAITING_FOR_ANSWER:
+        return False
     if kind == UserMessageKind.CANDIDATE_ANSWER:
         return True
-    # OTHER: short / meta → skip
-    if _looks_like_general_question(user_text):
-        return False
-    t = _norm(user_text)
-    if len(t.split()) < 8:
-        return False
-    return True
+    if kind == UserMessageKind.OTHER:
+        if _looks_like_general_question(user_text):
+            return False
+        if len(_norm(user_text).split()) < 8:
+            return False
+        return True
+    return False
 
 
 def infer_focus_override_from_message(text: str) -> str | None:
-    """
-    Map common user phrases to a catalog focus label (approximate sidebar values).
-
-    Returns None if no recognized switch (e.g. only "repeat").
-    """
+    """Map common user phrases to a catalog focus label (approximate sidebar values)."""
     t = _norm(text)
     mapping: tuple[tuple[str, str], ...] = (
         ("behavioral", "Behavioral / Soft Skills"),
@@ -326,28 +817,33 @@ def infer_focus_override_from_message(text: str) -> str | None:
 
 
 def extract_follow_up_from_feedback_message(assistant_text: str) -> str | None:
-    """Parse the first follow-up line from mock-interview feedback formatting."""
+    """Parse the next question line from mock-interview feedback formatting."""
     text = (assistant_text or "").strip()
     if not text:
         return None
-    if "**Score:" not in text and not re.search(r"(?m)^##\s*score\s*$", text, re.IGNORECASE):
-        # Heuristic: not our feedback layout
-        if "Score:" not in text:
-            return None
-    # **Follow-up:**\nline — primary path from chat_service
-    m = re.search(
-        r"\*\*Follow-up:\*\*\s*\n+\s*(.+?)(?:\n\n|\Z)",
-        text,
-        re.DOTALL | re.IGNORECASE,
+    has_score = (
+        "**Overall score" in text
+        or "**Overall Score" in text
+        or "**Score:" in text
+        or re.search(r"(?m)^##\s*Overall\s+[Ss]core\s*$", text)
+        or re.search(r"(?m)^##\s*score\s*$", text, re.IGNORECASE)
     )
-    if m:
-        line = m.group(1).strip()
-        return line or None
-    m2 = re.search(r"(?mi)^##\s*Follow-up\s*\n+(.*?)(?=\n##\s|\Z)", text, re.DOTALL)
-    if m2:
-        block = m2.group(1).strip()
-        first = block.splitlines()[0].strip() if block else ""
-        return first or None
+    if not has_score and "Score:" not in text:
+        return None
+
+    patterns = (
+        r"\*\*Next Follow-up Question:\*\*\s*\n+\s*(.+?)(?:\n\n|\Z)",
+        r"\*\*Follow-up:\*\*\s*\n+\s*(.+?)(?:\n\n|\Z)",
+        r"(?mi)^##\s*Next Follow-up Question\s*\n+\s*(.+?)(?:\n\n|\Z)",
+        r"(?mi)^##\s*Follow-up\s*\n+(.*?)(?=\n##\s|\Z)",
+    )
+    for pat in patterns:
+        m = re.search(pat, text, re.DOTALL | re.IGNORECASE)
+        if m:
+            line = m.group(1).strip()
+            first = line.splitlines()[0].strip() if line else ""
+            if first:
+                return first
     return None
 
 
@@ -355,11 +851,7 @@ def sync_mock_interview_session_from_messages(
     session_state: MutableMapping[str, Any] | None,
     messages: list[ChatMessage],
 ) -> None:
-    """
-    Rebuild pending question + phase from transcript (e.g. after loading a session).
-
-    Best-effort: older transcripts may only have blended assistant text.
-    """
+    """Rebuild pending question + phase from transcript (e.g. after loading a session)."""
     if session_state is None:
         return
     if not messages:
@@ -377,12 +869,32 @@ def sync_mock_interview_session_from_messages(
 
     fu = extract_follow_up_from_feedback_message(last_assistant)
     if fu:
-        set_mock_state(session_state, pending_question=fu, phase=MockInterviewPhase.AWAITING_ANSWER)
+        set_mock_state(
+            session_state,
+            pending_question=fu,
+            phase=MockInterviewPhase.AWAITING_ANSWER,
+            interview_state=InterviewState.WAITING_FOR_ANSWER,
+        )
         return
 
-    if "**Score:" in last_assistant or re.search(r"(?m)^##\s*(Score|score)\s*$", last_assistant):
-        set_mock_state(session_state, pending_question=None, phase=MockInterviewPhase.FEEDBACK_GIVEN)
+    if (
+        "**Overall score" in last_assistant
+        or "**Overall Score" in last_assistant
+        or "**Score:" in last_assistant
+        or re.search(r"(?m)^##\s*Overall\s+[Ss]core\s*$", last_assistant)
+    ):
+        set_mock_state(
+            session_state,
+            pending_question=None,
+            phase=MockInterviewPhase.FEEDBACK_GIVEN,
+            interview_state=InterviewState.GREETING,
+        )
         return
 
     pending = last_assistant.strip()
-    set_mock_state(session_state, pending_question=pending, phase=MockInterviewPhase.AWAITING_ANSWER)
+    set_mock_state(
+        session_state,
+        pending_question=pending,
+        phase=MockInterviewPhase.AWAITING_ANSWER,
+        interview_state=InterviewState.WAITING_FOR_ANSWER,
+    )

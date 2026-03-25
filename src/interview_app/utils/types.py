@@ -37,13 +37,20 @@ class ChatMessage(BaseModel):
 
 
 class EvaluationResult(BaseModel):
-    """Structured evaluation from answer_evaluator (score, criteria, critique)."""
+    """Structured evaluation from answer_evaluator (score, dimensions, critique, follow-up)."""
 
     score: int = Field(default=0, ge=0, le=10)
+    technical_accuracy: str = Field(default="", description="Short assessment, often X/10-style")
+    clarity: str = Field(default="")
+    depth: str = Field(default="")
+    communication: str = Field(default="")
+    strengths: list[str] = Field(default_factory=list)
+    improvements: list[str] = Field(default_factory=list)
     criteria_met: list[str] = Field(default_factory=list)
     criteria_missing: list[str] = Field(default_factory=list)
     critique: str = Field(default="")
     improved_answer: str = Field(default="")
+    next_follow_up_question: str = Field(default="")
     follow_ups: list[str] = Field(default_factory=list)
 
 

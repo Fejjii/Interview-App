@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from interview_app.app.ui_settings import UISettings
 from interview_app.security.output_guard import OutputGuardResult
-from interview_app.services.chat_service import _answer_general_question
+from interview_app.services.chat_service import _answer_general_question, mock_llm_config_from_settings
 from interview_app.utils.types import ChatMessage, LLMResponse
 
 
@@ -40,7 +40,9 @@ def test_answer_general_question_uses_protect_system_prompt_and_output_pipeline(
         mock_cls.return_value.generate_response.return_value = resp
         settings = _minimal_settings()
         messages = [ChatMessage(role="user", content="How are you?")]
-        out = _answer_general_question(settings, messages, "How are you?")
+        out = _answer_general_question(
+            settings, messages, "How are you?", mock_llm_config_from_settings(settings)
+        )
 
     assert "thanks" in out.assistant_message.lower() or "well" in out.assistant_message.lower()
     mock_cls.assert_called_once()
@@ -65,7 +67,9 @@ def test_answer_general_question_output_guard_failure_message() -> None:
         with patch("interview_app.services.chat_service.run_output_pipeline", return_value=blocked):
             settings = _minimal_settings()
             messages = [ChatMessage(role="user", content="Hi")]
-            out = _answer_general_question(settings, messages, "Hi")
+            out = _answer_general_question(
+                settings, messages, "Hi", mock_llm_config_from_settings(settings)
+            )
 
     assert out.assistant_message == blocked.reason
 
@@ -78,7 +82,13 @@ def test_answer_general_question_passes_byo_api_key_to_client() -> None:
         settings = _minimal_settings()
         messages = [ChatMessage(role="user", content="Hi")]
         secret = "sk-test123456789012345678901234567890"
-        out = _answer_general_question(settings, messages, "Hi", openai_api_key=secret)
+        out = _answer_general_question(
+            settings,
+            messages,
+            "Hi",
+            mock_llm_config_from_settings(settings),
+            openai_api_key=secret,
+        )
 
     assert "sk-" not in out.assistant_message
     assert mock_cls.call_args.kwargs.get("api_key") == secret

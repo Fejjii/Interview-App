@@ -12,9 +12,15 @@ from interview_app.services.answer_evaluator import EvaluateAnswerResult
 from interview_app.services.chat_service import run_turn
 from interview_app.services.interview_generator import GenerateQuestionsResult
 from interview_app.services.mock_interview_flow import (
+    InterviewState,
     UserMessageKind,
+    UserTurnType,
     classify_user_message,
+    detect_user_turn_type,
+    extract_candidate_topics,
+    should_evaluate,
     should_run_evaluation,
+    should_run_full_evaluation,
 )
 from interview_app.utils.types import ChatMessage, EvaluationResult, LLMResponse
 
@@ -217,6 +223,31 @@ def test_switch_to_behavioral_skips_evaluation_and_sets_behavioral_focus(
 
     ev.assert_not_called()
     assert gen.call_args.kwargs.get("interview_focus") == "Behavioral / Soft Skills"
+
+
+def test_ready_phrase_i_am_ready_classifies_as_start() -> None:
+    assert classify_user_message("Hello, I am ready for the interview") == UserMessageKind.START_REQUEST
+
+
+def test_clarification_turn_never_evaluates_even_when_waiting() -> None:
+    text = "Before I answer, can you clarify if this interview is more theoretical or practical?"
+    assert detect_user_turn_type(text, pending_question="Why PostgreSQL?") == UserTurnType.CLARIFICATION
+    assert should_run_full_evaluation(
+        pending_question="Why PostgreSQL?",
+        turn_type=UserTurnType.CLARIFICATION,
+        interview_state=InterviewState.WAITING_FOR_ANSWER,
+        user_text=text,
+    ) is False
+    assert should_evaluate(UserTurnType.CLARIFICATION, InterviewState.WAITING_FOR_ANSWER) is False
+
+
+def test_extract_topics_from_engineering_answer() -> None:
+    ans = (
+        "We migrated from Redshift to Snowflake and modeled incremental dbt runs for late-arriving events."
+    )
+    topics = extract_candidate_topics(ans)
+    assert any("snowflake" in t.lower() for t in topics)
+    assert any("dbt" in t.lower() for t in topics)
 
 
 def test_restart_resets_pending_question(input_pipeline_ok: None) -> None:

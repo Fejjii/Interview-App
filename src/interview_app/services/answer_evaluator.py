@@ -13,7 +13,7 @@ from typing import Any
 
 from interview_app.app.interview_form_config import truncate_job_description, validate_role_title
 from interview_app.llm.openai_client import LLMClient
-from interview_app.prompts.personas import get_persona_prompt
+from interview_app.prompts.personas import get_persona_evaluation_rubric, get_persona_prompt
 from interview_app.prompts.prompt_strategies import evaluation_coaching_directive
 from interview_app.security.guards import GuardrailResult, protect_system_prompt
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
@@ -55,6 +55,8 @@ def evaluate_answer(
     response_language: str = "en",
     persona: str = "Hiring Manager",
     prompt_strategy: str | None = None,
+    candidate_topics: list[str] | None = None,
+    evaluation_context_hints: str = "",
     session_state: dict[str, Any] | None = None,
     skip_session_rate_limit: bool = False,
     openai_api_key: str | None = None,
@@ -152,6 +154,7 @@ def evaluate_answer(
             prompt_strategy=prompt_strategy,
         )
     )
+    topics = [str(x).strip() for x in (candidate_topics or []) if str(x).strip()]
     jd_text = truncate_job_description(job_description)
     jd_pipe = run_input_pipeline(
         jd_text,
@@ -184,6 +187,8 @@ def evaluate_answer(
         job_description=jd_pipe.cleaned_text if jd_text else "",
         question=q_pipe.cleaned_text,
         answer=a_pipe.cleaned_text,
+        candidate_topics=topics,
+        evaluation_context_hints=(evaluation_context_hints or "").strip(),
     )
 
     try:
@@ -254,31 +259,42 @@ def _evaluator_system_prompt(
     persona: str = "Hiring Manager",
     prompt_strategy: str | None = None,
 ) -> str:
+    rubric = get_persona_evaluation_rubric(persona)
     base = (
-        "You are an expert interview coach. Evaluate the candidate's answer with a focus on clarity, "
-        "correctness, structure, and trade-offs. Be specific and actionable. "
-        "Include what's missing or weak and what a stronger answer would include."
+        "You are an expert interviewer evaluating a live mock-interview response. "
+        "Be specific, professional, and actionable. Apply the persona rubric consistently."
         "\n\n"
         "Output format (use these exact section headers for parsing):\n"
-        "## Score\n"
-        "A single number 0-10.\n"
-        "## Criteria met\n"
+        "## Overall score\n"
+        "A single integer 0-10 (overall).\n"
+        "## Technical Accuracy\n"
+        "2-4 sentences; may include a sub-score like (7/10) if helpful.\n"
+        "## Clarity\n"
+        "1-3 sentences.\n"
+        "## Depth\n"
+        "1-3 sentences.\n"
+        "## Communication\n"
+        "1-3 sentences (structure, precision, listening to the question).\n"
+        "## Strengths\n"
         "Bullet list of what the candidate did well.\n"
-        "## Criteria missing / Gaps\n"
-        "Bullet list of what was missing or weak. What would a stronger answer include?\n"
-        "## Critique\n"
-        "Short paragraph: what's missing, gaps, and how to improve.\n"
-        "## Improved answer\n"
-        "A concise improved answer snippet (2-4 sentences).\n"
-        "## Follow-up questions\n"
-        "Exactly 3 follow-up questions (one per line or numbered).\n"
+        "## Improvements\n"
+        "Bullet list of concrete improvements or missing elements.\n"
+        "## Better / Model Answer\n"
+        "A concise model answer (3-6 sentences).\n"
+        "## Next Follow-up Question\n"
+        "Exactly ONE follow-up interview question on the next line (no bullets). "
+        "It should feel like a natural continuation of this mock interview and, when candidate topics "
+        "are provided, MUST drill into those specifics (tools, architecture, trade-offs, testing, ops).\n"
+        "\n"
+        "Legacy compatibility: you may also include optional sections ## Criteria met and "
+        "## Criteria missing / Gaps if you already wrote bullets under Strengths/Improvements.\n"
     )
     persona_fragment = get_persona_prompt(persona)
     strategy_note = (
         f"\n\n{evaluation_coaching_directive(prompt_strategy)}" if prompt_strategy else ""
     )
     return (
-        f"{base}\n\nInterviewer tone: {persona_fragment}"
+        f"{base}\n\nInterviewer persona: {persona_fragment}\n\nPersona rubric (grading + follow-ups):\n{rubric}"
         f"{strategy_note}\n\n{language_instruction(response_language)}"
     )
 
@@ -294,12 +310,20 @@ def _evaluator_user_prompt(
     job_description: str,
     question: str,
     answer: str,
+    candidate_topics: list[str],
+    evaluation_context_hints: str,
 ) -> str:
     jd_block = (
         f"\nJob description (optional):\n{job_description}\n"
         if (job_description or "").strip()
         else ""
     )
+    topics_block = ""
+    if candidate_topics:
+        topics_block = "\nCandidate topics mentioned (use for Next Follow-up Question):\n- " + "\n- ".join(
+            candidate_topics[:20]
+        )
+    hints_block = f"\nFollow-up instruction:\n{evaluation_context_hints}\n" if evaluation_context_hints else ""
     return (
         f"Role category: {role_category}\n"
         f"Role title: {role_title}\n"
@@ -307,7 +331,7 @@ def _evaluator_user_prompt(
         f"Interview round: {interview_round}\n"
         f"Interview focus: {interview_focus}\n"
         f"Calibrated difficulty: {effective_difficulty}\n"
-        f"{jd_block}\n"
+        f"{jd_block}{topics_block}{hints_block}\n"
         "Question:\n"
         f"{question}\n\n"
         "Candidate answer:\n"
@@ -342,28 +366,51 @@ def _parse_evaluation_response(text: str) -> EvaluationResult | None:
                 out.append(line)
         return out
 
-    score_str = section("Score")
+    score_str = section("Overall score") or section("Score")
     score = 0
     for part in score_str.replace(".", " ").split():
         if part.isdigit():
             score = min(10, max(0, int(part)))
             break
 
-    criteria_met = bullets(section("Criteria met"))
-    criteria_missing = bullets(section("Criteria missing / Gaps")) or bullets(section("Gaps"))
+    technical_accuracy = section("Technical Accuracy")
+    clarity = section("Clarity")
+    depth = section("Depth")
+    communication = section("Communication")
+    strengths = bullets(section("Strengths"))
+    improvements = bullets(section("Improvements"))
+    criteria_met = bullets(section("Criteria met")) or list(strengths)
+    criteria_missing = (
+        bullets(section("Criteria missing / Gaps")) or bullets(section("Gaps")) or list(improvements)
+    )
     critique = section("Critique")
-    improved = section("Improved answer")
+    improved = section("Better / Model Answer") or section("Improved answer")
+    next_block = section("Next Follow-up Question")
+    next_fu = next_block.splitlines()[0].strip() if next_block else ""
     follow_up_block = section("Follow-up questions")
     follow_ups = bullets(follow_up_block)
+    if next_fu:
+        follow_ups = [next_fu] + [x for x in follow_ups if x != next_fu]
     if len(follow_ups) > 3:
         follow_ups = follow_ups[:3]
+    if not strengths and criteria_met:
+        strengths = list(criteria_met)
+    if not improvements and criteria_missing:
+        improvements = list(criteria_missing)
 
     return EvaluationResult(
         score=score,
+        technical_accuracy=technical_accuracy,
+        clarity=clarity,
+        depth=depth,
+        communication=communication,
+        strengths=strengths,
+        improvements=improvements,
         criteria_met=criteria_met,
         criteria_missing=criteria_missing,
         critique=critique,
         improved_answer=improved,
+        next_follow_up_question=next_fu,
         follow_ups=follow_ups,
     )
 

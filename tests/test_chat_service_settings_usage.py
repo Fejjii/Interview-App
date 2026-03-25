@@ -133,3 +133,5 @@ def test_evaluate_answer_receives_settings_and_prompt_strategy(
     assert kw["top_p"] == 0.88
     assert kw["max_tokens"] == 1200
     assert kw["question"] == "Design a URL shortener"
+    assert isinstance(kw.get("candidate_topics"), list)
+    assert kw.get("evaluation_context_hints") is not None

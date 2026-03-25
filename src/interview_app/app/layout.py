@@ -208,14 +208,14 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
     """Primary workspace: session row + wide chat."""
     _render_section_heading(
         "Mock Interview",
-        "Answer as you would live. The coach uses your sidebar configuration and adapts each turn.",
+        "Answer as you would live. The interviewer uses your sidebar configuration and adapts each turn.",
     )
 
     with st.expander("How to use", expanded=False):
         st.markdown(
-            "Type a greeting or **Let's start** for your first question. "
-            "After each answer you get brief feedback and a follow-up. "
-            "Adjust role and round in the sidebar anytime."
+            "Say hello or that you’re ready to begin — the interviewer opens with a short structure line "
+            "and the **first question** immediately. After each substantive answer you get structured feedback "
+            "and a follow-up. Adjust role and round in the sidebar anytime."
         )
 
     _render_session_row_compact(settings)
@@ -224,7 +224,8 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
     with st.container(border=True):
         if not messages:
             st.info(
-                "Say hello, paste a short role summary, or type **Let's start** when you are ready for your first question."
+                "Say hello or that you’re ready — the mock interviewer will start with one structure sentence "
+                "and then your **first question** (no need to ask for it explicitly)."
             )
         else:
             for msg in messages:

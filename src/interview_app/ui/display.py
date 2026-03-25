@@ -137,22 +137,29 @@ def show_evaluation_dashboard(evaluation: EvaluationResult) -> None:
     """
     st.subheader("Evaluation results")
 
+    strengths_list = evaluation.strengths or evaluation.criteria_met
+    gaps_list = evaluation.improvements or evaluation.criteria_missing
     m1, m2, m3 = st.columns(3)
     with m1:
         st.metric("Overall score", f"{evaluation.score}/10")
     with m2:
-        st.metric("Strengths noted", len(evaluation.criteria_met))
+        st.metric("Strengths noted", len(strengths_list))
     with m3:
-        st.metric("Gaps flagged", len(evaluation.criteria_missing))
+        st.metric("Gaps flagged", len(gaps_list))
 
     st.markdown("---")
+    follow = (
+        [evaluation.next_follow_up_question]
+        if evaluation.next_follow_up_question
+        else evaluation.follow_ups
+    )
     show_evaluation(
         score=evaluation.score,
-        criteria_met=evaluation.criteria_met,
-        criteria_missing=evaluation.criteria_missing,
+        criteria_met=strengths_list,
+        criteria_missing=gaps_list,
         critique=evaluation.critique,
         improved_answer=evaluation.improved_answer,
-        follow_ups=evaluation.follow_ups,
+        follow_ups=follow,
         show_score_banner=False,
     )
 
