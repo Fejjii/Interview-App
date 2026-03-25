@@ -171,7 +171,8 @@ def _streamlit_widget_overrides() -> str:
 [data-testid="stSidebar"] .stMarkdown p,
 [data-testid="stSidebar"] .stMarkdown li,
 [data-testid="stMain"] .stMarkdown,
-[data-testid="stMain"] .stMarkdown p {
+[data-testid="stMain"] .stMarkdown p,
+[data-testid="stMain"] .stMarkdown li {
     color: var(--text-primary) !important;
 }
 [data-testid="stSidebar"] .stMarkdown strong {
