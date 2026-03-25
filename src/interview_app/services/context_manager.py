@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import MutableMapping
-from typing import Any
+from typing import Any, TypedDict
 
 from interview_app.utils.types import ChatMessage
 
@@ -22,9 +22,20 @@ from interview_app.services.context_extractor import (
 )
 
 KEY_SESSION_INTERVIEW_CONTEXT = "ia_session_interview_context"
+KEY_ACTIVE_INTERVIEW_QUESTION = "ia_mock_active_question"
 
 # Caps keep prompts bounded; oldest entries naturally age out per bucket (merge truncates).
 _MAX_PER_BUCKET = 32
+
+
+class ActiveInterviewQuestionDict(TypedDict, total=False):
+    """Grounding metadata for the question currently awaiting an answer."""
+
+    question_text: str
+    question_type: str
+    based_on_topics: list[str]
+    based_on_project: str
+    expected_focus: list[str]
 
 
 def init_session_interview_context(session_state: MutableMapping[str, Any]) -> None:
@@ -56,6 +67,44 @@ def clear_session_interview_context(session_state: MutableMapping[str, Any] | No
     session_state[KEY_SESSION_INTERVIEW_CONTEXT] = empty_interview_topics()
 
 
+def clear_active_interview_question(session_state: MutableMapping[str, Any] | None) -> None:
+    if session_state is None:
+        return
+    session_state[KEY_ACTIVE_INTERVIEW_QUESTION] = None
+
+
+def get_active_interview_question(
+    session_state: MutableMapping[str, Any] | None,
+) -> ActiveInterviewQuestionDict | None:
+    if not session_state:
+        return None
+    raw = session_state.get(KEY_ACTIVE_INTERVIEW_QUESTION)
+    if not isinstance(raw, dict):
+        return None
+    return raw  # type: ignore[return-value]
+
+
+def set_active_interview_question(
+    session_state: MutableMapping[str, Any] | None,
+    *,
+    question_text: str,
+    question_type: str = "standard",
+    based_on_topics: list[str] | None = None,
+    based_on_project: str = "",
+    expected_focus: list[str] | None = None,
+) -> None:
+    if session_state is None:
+        return
+    payload: ActiveInterviewQuestionDict = {
+        "question_text": question_text,
+        "question_type": question_type,
+        "based_on_topics": list(based_on_topics or []),
+        "based_on_project": (based_on_project or "").strip(),
+        "expected_focus": list(expected_focus or []),
+    }
+    session_state[KEY_ACTIVE_INTERVIEW_QUESTION] = payload
+
+
 def get_session_interview_context(session_state: MutableMapping[str, Any] | None) -> InterviewTopicsDict:
     if not session_state:
         return empty_interview_topics()
@@ -65,8 +114,15 @@ def get_session_interview_context(session_state: MutableMapping[str, Any] | None
     out = empty_interview_topics()
     for k in out:
         v = raw.get(k)
-        if isinstance(v, list):
+        if k == "last_project_summary":
+            if v is None:
+                out[k] = ""
+            else:
+                out[k] = str(v).strip()[:4000]
+        elif isinstance(v, list):
             out[k] = [str(x).strip() for x in v if str(x).strip()][: _MAX_PER_BUCKET]
+        else:
+            out[k] = empty_interview_topics()[k]  # type: ignore[index]
     return out
 
 
@@ -81,10 +137,13 @@ def merge_message_into_session_context(
     incoming = extract_interview_topics(message, max_per_bucket=_MAX_PER_BUCKET)
     current = get_session_interview_context(session_state)
     merged: InterviewTopicsDict = empty_interview_topics()
+    skip_union = frozenset({"recent_topics", "last_project_summary"})
     for key in merged:
+        if key in skip_union:
+            continue
         seen: set[str] = set()
         combined: list[str] = []
-        for item in list(current[key]) + list(incoming[key]):
+        for item in list(current[key]) + list(incoming[key]):  # type: ignore[arg-type]
             kl = item.strip().lower()
             if not kl or kl in seen:
                 continue
@@ -92,7 +151,14 @@ def merge_message_into_session_context(
             combined.append(item.strip())
             if len(combined) >= _MAX_PER_BUCKET:
                 break
-        merged[key] = combined
+        merged[key] = combined  # type: ignore[index]
+    merged["recent_topics"] = flatten_interview_topics(merged, max_items=24)
+    prev_summary = (current.get("last_project_summary") or "").strip()
+    if interview_topics_non_empty(incoming):
+        new_s = (incoming.get("last_project_summary") or "").strip()
+        merged["last_project_summary"] = new_s or prev_summary
+    else:
+        merged["last_project_summary"] = prev_summary
     session_state[KEY_SESSION_INTERVIEW_CONTEXT] = merged
     return merged
 
@@ -110,6 +176,11 @@ def context_summary_lines(ctx: InterviewTopicsDict) -> list[str]:
         lines.append("Projects / themes: " + ", ".join(ctx["projects"][:12]))
     if ctx["achievements"]:
         lines.append("Achievements / outcomes: " + ", ".join(ctx["achievements"][:10]))
+    if ctx.get("domains"):
+        lines.append("Domains: " + ", ".join(ctx["domains"][:10]))
+    summary = (ctx.get("last_project_summary") or "").strip()
+    if summary:
+        lines.append("Latest project narrative (short): " + summary[:400])
     return lines
 
 
@@ -222,3 +293,59 @@ def build_question_generation_context_suffix(
             "(architecture, metrics, failures, testing, cost) - not a generic behavioral question."
         )
     return ""
+
+
+def expected_focus_hints(ctx: InterviewTopicsDict, interview_focus: str) -> list[str]:
+    """Short labels for ``active_interview_question.expected_focus`` (evaluation + follow-ups)."""
+    out: list[str] = []
+    focus = (interview_focus or "").strip()
+    if focus:
+        out.append(focus)
+    if ctx.get("achievements"):
+        out.append("Validation / quantified outcomes")
+    if ctx.get("concepts"):
+        out.append("Technical modeling / edge cases")
+    for p in ctx.get("projects") or []:
+        if "migration" in (p or "").lower():
+            out.append("Migration / consistency / cutover")
+            break
+    if ctx.get("tools") or ctx.get("technologies"):
+        out.append("Tooling and production trade-offs")
+    return _unique_trimmed_list(out, cap=8)
+
+
+def build_evaluation_active_question_hints(session_state: MutableMapping[str, Any] | None) -> str:
+    """Extra evaluator instructions when the pending question was context-grounded."""
+    active = get_active_interview_question(session_state)
+    if not active:
+        return ""
+    lines: list[str] = []
+    qtype = (active.get("question_type") or "").strip()
+    if qtype in ("contextual_follow_up", "evaluator_follow_up"):
+        lines.append(
+            "Grading context: **contextual follow-up** tied to the candidate’s project story. "
+            "Keep critique and the next follow-up anchored to that story (architecture, data quality, "
+            "migration, performance validation) — avoid unrelated generic topics."
+        )
+    if active.get("based_on_project"):
+        lines.append(f"Project anchor: {active['based_on_project'][:520]}")
+    if active.get("based_on_topics"):
+        lines.append("Topic tags: " + ", ".join(active["based_on_topics"][:18]))
+    if active.get("expected_focus"):
+        lines.append("Emphasis: " + "; ".join(active["expected_focus"][:8]))
+    return "\n".join(lines).strip()
+
+
+def _unique_trimmed_list(items: list[str], *, cap: int) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in items:
+        t = x.strip()
+        k = t.lower()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append(t)
+        if len(out) >= cap:
+            break
+    return out

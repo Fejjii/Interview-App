@@ -19,6 +19,9 @@ class InterviewTopicsDict(TypedDict):
     concepts: list[str]
     projects: list[str]
     achievements: list[str]
+    domains: list[str]
+    recent_topics: list[str]
+    last_project_summary: str
 
 
 _TITLE_CASE_STOPWORDS: frozenset[str] = frozenset(
@@ -70,6 +73,9 @@ def empty_interview_topics() -> InterviewTopicsDict:
         "concepts": [],
         "projects": [],
         "achievements": [],
+        "domains": [],
+        "recent_topics": [],
+        "last_project_summary": "",
     }
 
 
@@ -223,6 +229,19 @@ _PROJECT_PHRASES: tuple[tuple[str, str], ...] = (
     ("event-driven", "Event-driven architecture"),
 )
 
+_DOMAIN_PHRASES: tuple[tuple[str, str], ...] = (
+    ("data warehouse", "Data warehousing"),
+    ("data lake", "Data lake / lakehouse"),
+    ("analytics", "Analytics engineering"),
+    ("machine learning", "Machine learning"),
+    ("ml ", "Machine learning"),
+    ("streaming", "Streaming data"),
+    ("batch", "Batch data processing"),
+    ("data engineering", "Data engineering"),
+    ("platform", "Data platform"),
+    ("migration", "Data / system migration"),
+)
+
 _ACHIEVEMENT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"reduced\s+(?:runtime|latency|cost|spend)\s+by\s+[\d.]+\s*%", re.I), "Reduced runtime/cost (quantified)"),
     (re.compile(r"(?:cut|lowered|decreased|improved)\s+.+\s+by\s+[\d.]+\s*%", re.I), "Quantified improvement"),
@@ -300,19 +319,32 @@ def extract_interview_topics(message: str, *, max_per_bucket: int = 20) -> Inter
             out["achievements"].append(label)
 
     # Achievement: plain "by 40%" near reduce/improve
-    if re.search(r"(?:reduced|improved|cut|decreased|increased|optimized).{0,40}\d+\s*%", lowered):
+    if re.search(
+        r"(?:reduced|reduce|improved|improve|cut|decreased|decrease|increased|increase|optimized).{0,40}\d+\s*%",
+        lowered,
+    ):
         if not out["achievements"]:
             out["achievements"].append("Quantified performance/cost outcome")
 
-    for key in ("tools", "technologies", "concepts", "projects", "achievements"):
+    for needle, label in _DOMAIN_PHRASES:
+        if needle in lowered:
+            out["domains"].append(label)
+
+    for key in ("tools", "technologies", "concepts", "projects", "achievements", "domains"):
         out[key] = _dedupe_preserve(out[key], max_per_bucket)  # type: ignore[literal-required]
+
+    flat = flatten_interview_topics(out, max_items=12)
+    out["recent_topics"] = flat
+    if interview_topics_non_empty(out):
+        summary = re.sub(r"\s+", " ", raw.strip())
+        out["last_project_summary"] = summary[:280] + ("…" if len(summary) > 280 else "")
 
     return out
 
 
 def interview_topics_non_empty(d: InterviewTopicsDict | dict[str, Any]) -> bool:
     """True if any bucket has at least one entry."""
-    for k in ("tools", "technologies", "concepts", "projects", "achievements"):
+    for k in ("tools", "technologies", "concepts", "projects", "achievements", "domains"):
         if d.get(k):
             return True
     return False
@@ -321,7 +353,7 @@ def interview_topics_non_empty(d: InterviewTopicsDict | dict[str, Any]) -> bool:
 def flatten_interview_topics(d: InterviewTopicsDict | dict[str, Any], *, max_items: int = 40) -> list[str]:
     """Single list for evaluator hints and legacy ``candidate_topics`` merging."""
     items: list[str] = []
-    order = ("tools", "technologies", "concepts", "projects", "achievements")
+    order = ("tools", "technologies", "concepts", "projects", "achievements", "domains")
     for k in order:
         for x in d.get(k, []) or []:
             s = str(x).strip()

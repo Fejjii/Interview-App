@@ -41,6 +41,21 @@ class UserTurnType(str, Enum):
     META = "meta"
     EXPERIENCE = "experience"
     CONTROL = "control"
+    CONTEXTUAL_QUESTION_REQUEST = "contextual_question_request"
+    OTHER = "other"
+
+
+class MockInterviewTurnKind(str, Enum):
+    """Finer-grained mock interview routing (logging, tests, orchestration)."""
+
+    GREETING_OR_START = "greeting_or_start"
+    INTERVIEW_ANSWER = "interview_answer"
+    CLARIFICATION_QUESTION = "clarification_question"
+    META_INSTRUCTION = "meta_instruction"
+    PROJECT_EXPERIENCE_STATEMENT = "project_experience_statement"
+    REQUEST_CONTEXTUAL_QUESTION = "request_contextual_question"
+    GENERIC_QUESTION = "generic_question"
+    CONTROL_INSTRUCTION = "control_instruction"
     OTHER = "other"
 
 
@@ -210,6 +225,8 @@ _CONTEXT_LINKED_QUESTION_PHRASES: tuple[str, ...] = (
     "related to this",
     "about that project",
     "about this project",
+    "that project",
+    "this project",
     "question related",
     "ask me a question related",
     "ask a question related",
@@ -223,6 +240,57 @@ _CONTEXT_LINKED_QUESTION_PHRASES: tuple[str, ...] = (
     "follow up on that",
     "follow-up on that",
     "something technical about",
+)
+
+_PENDING_OVERLAP_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "what",
+        "when",
+        "where",
+        "why",
+        "how",
+        "would",
+        "could",
+        "should",
+        "does",
+        "did",
+        "have",
+        "has",
+        "your",
+        "please",
+        "tell",
+        "describe",
+        "explain",
+        "about",
+        "that",
+        "this",
+        "with",
+        "from",
+        "into",
+        "some",
+        "any",
+    }
+)
+
+_PROJECT_NARRATIVE_MARKERS: tuple[str, ...] = (
+    "i migrated",
+    "we migrated",
+    "i built",
+    "we built",
+    "i implemented",
+    "we implemented",
+    "i designed",
+    "we designed",
+    "i led",
+    "we led",
+    "in my last role",
+    "in my previous role",
+    "at my previous",
+    "my team and i",
+    "i worked on",
+    "we worked on",
+    "we moved",
+    "i moved",
 )
 
 
@@ -239,9 +307,13 @@ def clear_mock_interview_runtime_state(session_state: MutableMapping[str, Any] |
     session_state[KEY_PENDING_QUESTION] = None
     session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
     session_state[KEY_CANDIDATE_TOPICS] = []
-    from interview_app.services.context_manager import clear_session_interview_context
+    from interview_app.services.context_manager import (
+        clear_active_interview_question,
+        clear_session_interview_context,
+    )
 
     clear_session_interview_context(session_state)
+    clear_active_interview_question(session_state)
 
 
 def init_mock_interview_runtime_state(session_state: MutableMapping[str, Any]) -> None:
@@ -574,46 +646,111 @@ def _looks_like_general_question(text: str) -> bool:
     return False
 
 
+def _significant_terms(text: str) -> set[str]:
+    words = re.findall(r"[a-z][a-z0-9]{3,}", (text or "").lower())
+    return {w for w in words if w not in _PENDING_OVERLAP_STOPWORDS}
+
+
+def _pending_answer_overlap(user_text: str, pending: str | None) -> bool:
+    """True when the answer and pending question share substantive terms (topic alignment)."""
+    if not pending:
+        return False
+    pw = _significant_terms(pending)
+    uw = _significant_terms(user_text)
+    if not pw or not uw:
+        return False
+    return bool(pw & uw)
+
+
+def _looks_like_project_experience_narrative(t: str, original: str) -> bool:
+    """Volunteered project story cues (not necessarily off-topic if terms overlap the pending question)."""
+    if len((original or "").split()) < 8:
+        return False
+    return any(m in t for m in _PROJECT_NARRATIVE_MARKERS)
+
+
+def _map_turn_kind_to_user_type(kind: MockInterviewTurnKind) -> UserTurnType:
+    if kind == MockInterviewTurnKind.GREETING_OR_START:
+        return UserTurnType.GREETING
+    if kind == MockInterviewTurnKind.INTERVIEW_ANSWER:
+        return UserTurnType.ANSWER
+    if kind == MockInterviewTurnKind.CLARIFICATION_QUESTION:
+        return UserTurnType.CLARIFICATION
+    if kind == MockInterviewTurnKind.META_INSTRUCTION:
+        return UserTurnType.META
+    if kind == MockInterviewTurnKind.PROJECT_EXPERIENCE_STATEMENT:
+        return UserTurnType.EXPERIENCE
+    if kind == MockInterviewTurnKind.CONTROL_INSTRUCTION:
+        return UserTurnType.CONTROL
+    if kind == MockInterviewTurnKind.REQUEST_CONTEXTUAL_QUESTION:
+        return UserTurnType.CONTEXTUAL_QUESTION_REQUEST
+    if kind == MockInterviewTurnKind.GENERIC_QUESTION:
+        return UserTurnType.OTHER
+    return UserTurnType.OTHER
+
+
+def detect_mock_interview_turn_kind(
+    message: str,
+    pending_question: str | None = None,
+    session_state: MutableMapping[str, Any] | None = None,
+) -> MockInterviewTurnKind:
+    """
+    Deterministic mock-interview turn classification (orchestration + logging).
+
+    ``session_state`` is reserved for future context-aware signals; routing today is
+    message + pending-question driven.
+    """
+    _ = session_state
+    t = _norm(message)
+    if not t:
+        return MockInterviewTurnKind.OTHER
+    if _is_restart_request(t):
+        return MockInterviewTurnKind.OTHER
+    if _is_control_instruction(t):
+        return MockInterviewTurnKind.CONTROL_INSTRUCTION
+    if _user_wants_context_linked_question(t):
+        return MockInterviewTurnKind.REQUEST_CONTEXTUAL_QUESTION
+    if pending_question and _is_clarification(t, message):
+        return MockInterviewTurnKind.CLARIFICATION_QUESTION
+    if pending_question and _is_meta(t, message):
+        return MockInterviewTurnKind.META_INSTRUCTION
+    if pending_question and _wants_fresh_question(t):
+        return MockInterviewTurnKind.CONTROL_INSTRUCTION
+    if not pending_question and _is_ready_or_start(t):
+        return MockInterviewTurnKind.GREETING_OR_START
+    if not pending_question and _is_greeting_only(t):
+        return MockInterviewTurnKind.GREETING_OR_START
+    if (
+        pending_question
+        and _looks_like_project_experience_narrative(t, message)
+        and not _pending_answer_overlap(message, pending_question)
+    ):
+        return MockInterviewTurnKind.PROJECT_EXPERIENCE_STATEMENT
+    if pending_question and _looks_like_experience_digression(t, message, pending_question):
+        return MockInterviewTurnKind.PROJECT_EXPERIENCE_STATEMENT
+    if pending_question:
+        if _looks_like_interview_answer(message):
+            return MockInterviewTurnKind.INTERVIEW_ANSWER
+        if len(t.split()) >= 12 and not _looks_like_general_question(message):
+            return MockInterviewTurnKind.INTERVIEW_ANSWER
+        if _looks_like_general_question(message):
+            if "?" in message:
+                return MockInterviewTurnKind.CLARIFICATION_QUESTION
+            return MockInterviewTurnKind.META_INSTRUCTION
+        return MockInterviewTurnKind.OTHER
+    if _looks_like_job_context(message):
+        return MockInterviewTurnKind.OTHER
+    return MockInterviewTurnKind.OTHER
+
+
 def detect_user_turn_type(message: str, *, pending_question: str | None = None) -> UserTurnType:
     """
     Classify the user's message for mock-interview routing.
 
     When a question is pending, clarification and meta turns must not be treated as answers.
     """
-    t = _norm(message)
-    if not t:
-        return UserTurnType.OTHER
-    if _is_restart_request(t):
-        return UserTurnType.OTHER  # handled in chat_service via ``user_requests_restart`` before routing
-    if _is_control_instruction(t):
-        return UserTurnType.CONTROL
-    if _user_wants_context_linked_question(t):
-        return UserTurnType.CONTROL
-    if pending_question and _is_clarification(t, message):
-        return UserTurnType.CLARIFICATION
-    if pending_question and _is_meta(t, message):
-        return UserTurnType.META
-    if pending_question and _wants_fresh_question(t):
-        return UserTurnType.CONTROL
-    if not pending_question and _is_ready_or_start(t):
-        return UserTurnType.GREETING
-    if not pending_question and _is_greeting_only(t):
-        return UserTurnType.GREETING
-    if pending_question and _looks_like_experience_digression(t, message, pending_question):
-        return UserTurnType.EXPERIENCE
-    if pending_question:
-        if _looks_like_interview_answer(message):
-            return UserTurnType.ANSWER
-        if len(t.split()) >= 12 and not _looks_like_general_question(message):
-            return UserTurnType.ANSWER
-        if _looks_like_general_question(message):
-            if "?" in message:
-                return UserTurnType.CLARIFICATION
-            return UserTurnType.META
-        return UserTurnType.OTHER
-    if _looks_like_job_context(message):
-        return UserTurnType.OTHER
-    return UserTurnType.OTHER
+    kind = detect_mock_interview_turn_kind(message, pending_question, None)
+    return _map_turn_kind_to_user_type(kind)
 
 
 def should_evaluate(turn_type: UserTurnType, interview_state: InterviewState) -> bool:
@@ -764,6 +901,8 @@ def _looks_like_job_context(text: str) -> bool:
 def _turn_type_to_message_kind(text: str, tt: UserTurnType) -> UserMessageKind:
     """Map new turn types to legacy ``UserMessageKind`` (tests and older helpers)."""
     if tt == UserTurnType.CONTROL:
+        return UserMessageKind.CONTROL_INSTRUCTION
+    if tt == UserTurnType.CONTEXTUAL_QUESTION_REQUEST:
         return UserMessageKind.CONTROL_INSTRUCTION
     if tt == UserTurnType.CLARIFICATION:
         return UserMessageKind.CLARIFICATION

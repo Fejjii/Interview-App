@@ -11,6 +11,7 @@ Mutates ``session_state`` mock keys when provided, including ``ia_interview_stat
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,13 +22,24 @@ from interview_app.llm.openai_client import LLMClient
 from interview_app.security.guards import protect_system_prompt
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
 from interview_app.services.answer_evaluator import evaluate_answer
-from interview_app.services.interview_generator import generate_questions
-from interview_app.services.context_manager import (
-    build_question_generation_context_suffix,
-    flatten_session_context_for_evaluator,
-    merge_message_into_session_context,
-    user_requests_context_based_question,
+from interview_app.services.context_extractor import (
+    flatten_interview_topics,
+    interview_topics_non_empty,
 )
+from interview_app.services.context_manager import (
+    build_evaluation_active_question_hints,
+    build_question_generation_context_suffix,
+    expected_focus_hints,
+    flatten_session_context_for_evaluator,
+    get_session_interview_context,
+    merge_message_into_session_context,
+    set_active_interview_question,
+)
+from interview_app.services.effective_interview_config import (
+    EffectiveInterviewConfig,
+    get_effective_interview_config,
+)
+from interview_app.services.interview_generator import generate_questions
 from interview_app.services.mock_interview_flow import (
     InterviewState,
     MockInterviewPhase,
@@ -37,6 +49,7 @@ from interview_app.services.mock_interview_flow import (
     build_interviewer_prompt,
     classify_user_message,
     clear_mock_interview_runtime_state,
+    detect_mock_interview_turn_kind,
     detect_user_turn_type,
     extract_candidate_topics,
     generate_contextual_follow_up_hints,
@@ -52,6 +65,8 @@ from interview_app.services.mock_interview_flow import (
 from interview_app.utils.errors import safe_user_message
 from interview_app.utils.interview_question_output import first_question_text_from_output
 from interview_app.utils.types import ChatMessage, EvaluationResult
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -102,6 +117,8 @@ def run_turn(
     if session_state is not None:
         init_mock_interview_runtime_state(session_state)
 
+    effective = get_effective_interview_config(settings, session_state)
+
     if not messages:
         if session_state is not None:
             clear_mock_interview_runtime_state(session_state)
@@ -134,13 +151,13 @@ def run_turn(
 
     pending = get_pending_question(session_state)
     interview_state = get_interview_state(session_state)
-    turn_type = detect_user_turn_type(last_user_content, pending_question=pending)
+
     kind = classify_user_message(last_user_content, pending_question=pending)
 
     if kind == UserMessageKind.RESTART_REQUEST:
         clear_mock_interview_runtime_state(session_state)
         return _greeting_and_first_question(
-            settings,
+            effective,
             messages,
             llm_cfg,
             session_state=session_state,
@@ -151,19 +168,32 @@ def run_turn(
     if session_state is not None:
         merge_message_into_session_context(session_state, last_user_content)
 
+    turn_type = detect_user_turn_type(last_user_content, pending_question=pending)
+    turn_kind = detect_mock_interview_turn_kind(last_user_content, pending, session_state)
+    ctx_dbg = get_session_interview_context(session_state)
+    role_ok, _ = validate_role_title(effective.role_title)
+    _logger.debug(
+        "mock_interview route semantic=%s turn=%s role_ok=%s pending=%s ctx_nonempty=%s",
+        turn_kind.value,
+        turn_type.value,
+        role_ok,
+        bool(pending),
+        interview_topics_non_empty(ctx_dbg),
+    )
+
     assistant_count = sum(1 for m in messages if m.role == "assistant")
 
     if assistant_count == 0:
         if turn_type == UserTurnType.GREETING or _looks_like_job_context(last_user_content):
             return _greeting_and_first_question(
-                settings,
+                effective,
                 messages,
                 llm_cfg,
                 session_state=session_state,
                 openai_api_key=openai_api_key,
             )
         return _answer_general_question(
-            settings, messages, last_user_content, llm_cfg, openai_api_key=openai_api_key
+            effective, messages, last_user_content, llm_cfg, openai_api_key=openai_api_key
         )
 
     if should_run_full_evaluation(
@@ -174,7 +204,7 @@ def run_turn(
     ):
         q = pending or ""
         return _evaluate_and_follow_up(
-            settings,
+            effective,
             messages,
             last_user_content,
             interview_question=q,
@@ -183,9 +213,18 @@ def run_turn(
             openai_api_key=openai_api_key,
         )
 
+    if turn_type == UserTurnType.CONTEXTUAL_QUESTION_REQUEST:
+        return _contextual_question_request_turn(
+            effective,
+            messages,
+            llm_cfg,
+            session_state=session_state,
+            openai_api_key=openai_api_key,
+        )
+
     if turn_type == UserTurnType.CONTROL:
         return _handle_control_instruction(
-            settings,
+            effective,
             messages,
             last_user_content,
             llm_cfg,
@@ -196,7 +235,7 @@ def run_turn(
 
     if turn_type == UserTurnType.GREETING:
         return _generate_next_question_turn(
-            settings,
+            effective,
             messages,
             llm_cfg,
             session_state=session_state,
@@ -212,7 +251,7 @@ def run_turn(
         if session_state is not None:
             set_interview_state(session_state, InterviewState.META_CONVERSATION)
         out = _interviewer_clarification_or_meta_turn(
-            settings,
+            effective,
             messages,
             last_user_content,
             llm_cfg,
@@ -225,16 +264,16 @@ def run_turn(
         return out
 
     return _answer_general_question(
-        settings, messages, last_user_content, llm_cfg, openai_api_key=openai_api_key
+        effective, messages, last_user_content, llm_cfg, openai_api_key=openai_api_key
     )
 
 
 def _resolve_job_description_for_chat(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
 ) -> str:
     """Prefer sidebar job description; otherwise reuse chat text as context."""
-    jd = (settings.job_description or "").strip()
+    jd = (effective.job_description or "").strip()
     if jd:
         return jd
     for m in messages:
@@ -274,7 +313,7 @@ def _normalize_question_text(text: str, raw_fallback: str) -> str:
 
 
 def _generate_next_question_turn(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
     llm_cfg: MockInterviewLLMConfig,
     *,
@@ -282,11 +321,12 @@ def _generate_next_question_turn(
     openai_api_key: str | None = None,
     lead_in: str | None = None,
     interview_focus: str | None = None,
+    active_question_type: str | None = None,
 ) -> ChatTurnResult:
     """Generate one interview question; store canonical question text in session."""
     if session_state is not None:
         set_interview_state(session_state, InterviewState.ASKING_QUESTION)
-    ok_title, _ = validate_role_title(settings.role_title)
+    ok_title, _ = validate_role_title(effective.role_title)
     if not ok_title:
         return ChatTurnResult(
             assistant_message=(
@@ -295,27 +335,27 @@ def _generate_next_question_turn(
             evaluation=None,
         )
 
-    job_description = _resolve_job_description_for_chat(settings, messages)
-    focus = settings.interview_focus if interview_focus is None else interview_focus
+    job_description = _resolve_job_description_for_chat(effective, messages)
+    focus = effective.interview_focus if interview_focus is None else interview_focus
     last_user = _latest_user_text(messages)
     ctx_suffix = build_question_generation_context_suffix(last_user, session_state)
 
     result = generate_questions(
-        role_category=settings.role_category,
-        role_title=settings.role_title,
-        seniority=settings.seniority,
-        interview_round=settings.interview_round,
+        role_category=effective.role_category,
+        role_title=effective.role_title,
+        seniority=effective.seniority,
+        interview_round=effective.interview_round,
         interview_focus=focus,
         job_description=job_description or "(none)",
         n_questions=1,
-        prompt_strategy=settings.prompt_strategy,
+        prompt_strategy=effective.prompt_strategy,
         model=llm_cfg.model_preset,
         temperature=llm_cfg.temperature,
         top_p=llm_cfg.top_p,
         max_tokens=llm_cfg.max_tokens,
-        response_language=settings.response_language,
-        difficulty=settings.effective_question_difficulty,
-        persona=settings.persona,
+        response_language=effective.response_language,
+        difficulty=effective.effective_question_difficulty,
+        persona=effective.interviewer_persona,
         session_state=session_state,
         skip_session_rate_limit=True,
         openai_api_key=openai_api_key,
@@ -337,11 +377,26 @@ def _generate_next_question_turn(
         phase=MockInterviewPhase.AWAITING_ANSWER,
         interview_state=InterviewState.WAITING_FOR_ANSWER,
     )
+    if session_state is not None:
+        ctx_snap = get_session_interview_context(session_state)
+        set_active_interview_question(
+            session_state,
+            question_text=question_text,
+            question_type=active_question_type or "standard",
+            based_on_topics=flatten_interview_topics(ctx_snap, max_items=24),
+            based_on_project=(ctx_snap.get("last_project_summary") or "").strip(),
+            expected_focus=expected_focus_hints(ctx_snap, focus),
+        )
+    _logger.debug(
+        "mock_interview new_question type=%s preview=%s",
+        active_question_type or "standard",
+        bool(ctx_suffix),
+    )
     return ChatTurnResult(assistant_message=display, evaluation=None)
 
 
 def _greeting_and_first_question(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
     llm_cfg: MockInterviewLLMConfig,
     *,
@@ -350,7 +405,7 @@ def _greeting_and_first_question(
     restart_ack: str | None = None,
 ) -> ChatTurnResult:
     """Brief interviewer intro + structure + first question (intro is not graded)."""
-    ok_title, _ = validate_role_title(settings.role_title)
+    ok_title, _ = validate_role_title(effective.role_title)
     if not ok_title:
         return ChatTurnResult(
             assistant_message=(
@@ -359,7 +414,7 @@ def _greeting_and_first_question(
             ),
             evaluation=None,
         )
-    role = (settings.role_title or "").strip() or "your target"
+    role = (effective.role_title or "").strip() or "your target"
     if restart_ack:
         lead = (
             f"{restart_ack}\n\n"
@@ -374,13 +429,43 @@ def _greeting_and_first_question(
             "Here’s your first question."
         )
     return _generate_next_question_turn(
-        settings,
+        effective,
         messages,
         llm_cfg,
         session_state=session_state,
         openai_api_key=openai_api_key,
         lead_in=lead,
-        interview_focus=settings.interview_focus,
+        interview_focus=effective.interview_focus,
+    )
+
+
+def _contextual_question_request_turn(
+    effective: EffectiveInterviewConfig,
+    messages: list[ChatMessage],
+    llm_cfg: MockInterviewLLMConfig,
+    *,
+    session_state: dict[str, Any] | None,
+    openai_api_key: str | None = None,
+) -> ChatTurnResult:
+    """User asked for a question tied to their prior story; never re-prompts for config that exists."""
+    ctx = get_session_interview_context(session_state)
+    preview = ", ".join(flatten_interview_topics(ctx, max_items=10))
+    lead = (
+        "Here’s the next question, grounded in what you’ve shared so far"
+        + (f": {preview}." if preview else " — let’s go deeper on your recent work.")
+    )
+    focus = effective.interview_focus
+    if interview_topics_non_empty(ctx) and focus == "Behavioral / Soft Skills":
+        focus = "CV / Experience Deep Dive"
+    return _generate_next_question_turn(
+        effective,
+        messages,
+        llm_cfg,
+        session_state=session_state,
+        openai_api_key=openai_api_key,
+        lead_in=lead,
+        interview_focus=focus,
+        active_question_type="contextual_follow_up",
     )
 
 
@@ -394,7 +479,7 @@ def _looks_like_job_context(text: str) -> bool:
 
 
 def _handle_control_instruction(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
     last_user_content: str,
     llm_cfg: MockInterviewLLMConfig,
@@ -414,21 +499,21 @@ def _handle_control_instruction(
         )
 
     override = infer_focus_override_from_message(last_user_content)
-    ack_focus = override or settings.interview_focus
+    ack_focus = override or effective.interview_focus
     ack = f"Understood — I’ll emphasize **{ack_focus}** in the next question."
     return _generate_next_question_turn(
-        settings,
+        effective,
         messages,
         llm_cfg,
         session_state=session_state,
         openai_api_key=openai_api_key,
         lead_in=ack,
-        interview_focus=override if override is not None else settings.interview_focus,
+        interview_focus=override if override is not None else effective.interview_focus,
     )
 
 
 def _interviewer_clarification_or_meta_turn(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
     last_user_content: str,
     llm_cfg: MockInterviewLLMConfig,
@@ -442,11 +527,11 @@ def _interviewer_clarification_or_meta_turn(
     topics = list(dict.fromkeys([*ctx_flat, *get_candidate_topics(session_state)]))[:24]
     system = protect_system_prompt(
         build_interviewer_prompt(
-            settings.persona,
-            interview_round=settings.interview_round,
-            focus=settings.interview_focus,
-            role_title=(settings.role_title or "").strip() or "candidate role",
-            seniority=settings.seniority,
+            effective.interviewer_persona,
+            interview_round=effective.interview_round,
+            focus=effective.interview_focus,
+            role_title=(effective.role_title or "").strip() or "candidate role",
+            seniority=effective.seniority,
             pending_question=pending_question,
             candidate_topics=topics,
         )
@@ -493,7 +578,7 @@ def _interviewer_clarification_or_meta_turn(
 
 
 def _answer_general_question(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
     last_user_content: str,
     llm_cfg: MockInterviewLLMConfig,
@@ -501,7 +586,7 @@ def _answer_general_question(
     openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """Fallback conversational turn (still uses sidebar LLM parameters)."""
-    role = (settings.role_title or "").strip() or "your target"
+    role = (effective.role_title or "").strip() or "your target"
     system = (
         "You are a concise assistant inside a mock interview app. The user’s message is not a graded "
         "interview answer. Reply helpfully in under 120 words, then invite them to say they’re ready "
@@ -575,7 +660,7 @@ def _format_evaluation_markdown(ev: EvaluationResult) -> str:
 
 
 def _evaluate_and_follow_up(
-    settings: UISettings,
+    effective: EffectiveInterviewConfig,
     messages: list[ChatMessage],
     last_user_content: str,
     *,
@@ -589,30 +674,32 @@ def _evaluate_and_follow_up(
     append_candidate_topics(session_state, fresh_topics)
     append_candidate_topics(session_state, flatten_session_context_for_evaluator(session_state))
     merged_topics = get_candidate_topics(session_state)
-    role = (settings.role_title or "").strip() or "your role"
-    hints = generate_contextual_follow_up_hints(
+    role = (effective.role_title or "").strip() or "your role"
+    hints_base = generate_contextual_follow_up_hints(
         merged_topics,
         role=role,
-        seniority=settings.seniority,
-        focus=settings.interview_focus,
+        seniority=effective.seniority,
+        focus=effective.interview_focus,
     )
+    active_hints = build_evaluation_active_question_hints(session_state)
+    hints = "\n".join(x for x in (hints_base, active_hints) if (x or "").strip()).strip()
     eval_result = evaluate_answer(
-        role_category=settings.role_category,
-        role_title=settings.role_title,
-        seniority=settings.seniority,
-        interview_round=settings.interview_round,
-        interview_focus=settings.interview_focus,
-        effective_difficulty=settings.effective_question_difficulty,
-        job_description=settings.job_description,
+        role_category=effective.role_category,
+        role_title=effective.role_title,
+        seniority=effective.seniority,
+        interview_round=effective.interview_round,
+        interview_focus=effective.interview_focus,
+        effective_difficulty=effective.effective_question_difficulty,
+        job_description=effective.job_description,
         question=interview_question,
         answer=last_user_content,
         model=llm_cfg.model_preset,
         temperature=llm_cfg.temperature,
         top_p=llm_cfg.top_p,
         max_tokens=llm_cfg.max_tokens,
-        response_language=settings.response_language,
-        persona=settings.persona,
-        prompt_strategy=settings.prompt_strategy,
+        response_language=effective.response_language,
+        persona=effective.interviewer_persona,
+        prompt_strategy=effective.prompt_strategy,
         candidate_topics=merged_topics,
         evaluation_context_hints=hints,
         session_state=session_state,
@@ -645,6 +732,17 @@ def _evaluate_and_follow_up(
         phase=MockInterviewPhase.AWAITING_ANSWER if next_pending else MockInterviewPhase.FEEDBACK_GIVEN,
         interview_state=InterviewState.WAITING_FOR_ANSWER if next_pending else InterviewState.GREETING,
     )
+
+    if next_pending and session_state is not None:
+        ctx_snap = get_session_interview_context(session_state)
+        set_active_interview_question(
+            session_state,
+            question_text=next_pending,
+            question_type="evaluator_follow_up",
+            based_on_topics=flatten_interview_topics(ctx_snap, max_items=24),
+            based_on_project=(ctx_snap.get("last_project_summary") or "").strip(),
+            expected_focus=expected_focus_hints(ctx_snap, effective.interview_focus),
+        )
 
     return ChatTurnResult(
         assistant_message=_format_evaluation_markdown(ev),
