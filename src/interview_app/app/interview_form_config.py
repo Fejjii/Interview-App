@@ -87,6 +87,9 @@ INTERVIEW_FOCUS_OPTIONS: tuple[str, ...] = (
 
 DIFFICULTY_MODES: tuple[str, ...] = ("Auto", "Easy", "Medium", "Hard", "Expert")
 
+# Main sidebar: manual difficulty or Auto (uses ``infer_difficulty_from_context``).
+QUESTION_DIFFICULTY_SIDEBAR_MODES: tuple[str, ...] = ("Auto", "Easy", "Medium", "Hard")
+
 # Ordered levels used for Auto inference and round-based bumps.
 _DIFFICULTY_ORDER: tuple[str, ...] = ("Easy", "Medium", "Hard", "Expert")
 

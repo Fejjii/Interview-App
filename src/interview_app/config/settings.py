@@ -77,7 +77,13 @@ class Settings(BaseSettings):
         default=None,
         description="OpenAI API key. Prefer setting via environment variable OPENAI_API_KEY.",
     )
-    openai_model: str = Field(default="gpt-4o-mini", description="Default OpenAI model name.")
+    openai_model: str = Field(
+        default="gpt-4o-mini",
+        description=(
+            "Default model when LLMClient is built without an explicit model: preset key "
+            "(gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini) or raw API model id."
+        ),
+    )
     openai_temperature: float = Field(
         default=0.2, ge=0.0, le=2.0, description="Default sampling temperature."
     )

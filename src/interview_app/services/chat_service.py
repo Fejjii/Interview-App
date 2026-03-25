@@ -92,12 +92,25 @@ def mock_llm_config_from_settings(settings: UISettings) -> MockInterviewLLMConfi
     )
 
 
+@dataclass(frozen=True)
+class LlmTurnDebug:
+    """Last OpenAI call prompts and parameters (mock interview; for sidebar debug toggle)."""
+
+    system_prompt: str
+    user_prompt: str
+    model: str
+    temperature: float
+    top_p: float | None
+    max_tokens: int
+
+
 @dataclass
 class ChatTurnResult:
     """Result of one chat turn: assistant message and optional structured evaluation."""
 
     assistant_message: str
     evaluation: EvaluationResult | None = None
+    llm_debug: LlmTurnDebug | None = None
 
 
 def run_turn(
@@ -363,14 +376,35 @@ def _generate_next_question_turn(
     )
 
     if not result.ok or result.response is None:
+        fail_debug: LlmTurnDebug | None = None
+        if result.prompt is not None:
+            fail_debug = LlmTurnDebug(
+                system_prompt=result.prompt.system_prompt,
+                user_prompt=result.prompt.user_prompt,
+                model=llm_cfg.resolved_model_name,
+                temperature=llm_cfg.temperature,
+                top_p=llm_cfg.top_p,
+                max_tokens=llm_cfg.max_tokens,
+            )
         return ChatTurnResult(
             assistant_message=result.error or "Could not generate a question. Please try again.",
             evaluation=None,
+            llm_debug=fail_debug,
         )
 
     raw = (result.response.text or "").strip()
     question_text = _normalize_question_text(raw, raw_fallback=result.response.text or "")
     display = f"{lead_in}\n\n{question_text}" if lead_in else question_text
+    q_debug: LlmTurnDebug | None = None
+    if result.prompt is not None:
+        q_debug = LlmTurnDebug(
+            system_prompt=result.prompt.system_prompt,
+            user_prompt=result.prompt.user_prompt,
+            model=llm_cfg.resolved_model_name,
+            temperature=llm_cfg.temperature,
+            top_p=llm_cfg.top_p,
+            max_tokens=llm_cfg.max_tokens,
+        )
     set_mock_state(
         session_state,
         pending_question=question_text,
@@ -392,7 +426,7 @@ def _generate_next_question_turn(
         active_question_type or "standard",
         bool(ctx_suffix),
     )
-    return ChatTurnResult(assistant_message=display, evaluation=None)
+    return ChatTurnResult(assistant_message=display, evaluation=None, llm_debug=q_debug)
 
 
 def _greeting_and_first_question(
@@ -555,6 +589,16 @@ def _interviewer_clarification_or_meta_turn(
             extra_messages=extra if extra else None,
             llm_route="mock_interview_meta",
         )
+        meta_t = min(0.85, llm_cfg.temperature + 0.15)
+        meta_mt = min(500, max(220, llm_cfg.max_tokens // 2))
+        meta_dbg = LlmTurnDebug(
+            system_prompt=system,
+            user_prompt=last_user_content,
+            model=llm_cfg.resolved_model_name,
+            temperature=meta_t,
+            top_p=llm_cfg.top_p,
+            max_tokens=meta_mt,
+        )
         out = run_output_pipeline(resp.text, service="chat_service")
         if not out.safe:
             return ChatTurnResult(
@@ -562,12 +606,17 @@ def _interviewer_clarification_or_meta_turn(
                 or "I couldn’t respond to that just now — here’s the question again when you’re ready.\n\n"
                 f"**Question:** {pending_question}",
                 evaluation=None,
+                llm_debug=meta_dbg,
             )
         body = (out.text or "").strip()
         suffix = f"\n\n**Question:** {pending_question}"
         if pending_question and pending_question not in body:
-            return ChatTurnResult(assistant_message=f"{body}{suffix}", evaluation=None)
-        return ChatTurnResult(assistant_message=body or suffix.strip(), evaluation=None)
+            return ChatTurnResult(
+                assistant_message=f"{body}{suffix}", evaluation=None, llm_debug=meta_dbg
+            )
+        return ChatTurnResult(
+            assistant_message=body or suffix.strip(), evaluation=None, llm_debug=meta_dbg
+        )
     except Exception as exc:
         return ChatTurnResult(
             assistant_message=(
@@ -707,11 +756,23 @@ def _evaluate_and_follow_up(
         openai_api_key=openai_api_key,
     )
 
+    eval_dbg: LlmTurnDebug | None = None
+    if eval_result.system_prompt and eval_result.user_prompt:
+        eval_dbg = LlmTurnDebug(
+            system_prompt=eval_result.system_prompt,
+            user_prompt=eval_result.user_prompt,
+            model=llm_cfg.resolved_model_name,
+            temperature=llm_cfg.temperature,
+            top_p=llm_cfg.top_p,
+            max_tokens=llm_cfg.max_tokens,
+        )
+
     if not eval_result.ok or eval_result.response is None:
         return ChatTurnResult(
             assistant_message=eval_result.error
             or "Evaluation failed. You can try answering again or ask for the next question.",
             evaluation=None,
+            llm_debug=eval_dbg,
         )
 
     ev = eval_result.evaluation
@@ -720,6 +781,7 @@ def _evaluate_and_follow_up(
             assistant_message=eval_result.response.text
             or "Evaluation complete. Ready for the next question when you are.",
             evaluation=None,
+            llm_debug=eval_dbg,
         )
 
     next_pending = (
@@ -747,4 +809,5 @@ def _evaluate_and_follow_up(
     return ChatTurnResult(
         assistant_message=_format_evaluation_markdown(ev),
         evaluation=ev,
+        llm_debug=eval_dbg,
     )

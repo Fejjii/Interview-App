@@ -21,7 +21,12 @@ from typing import Any
 from openai import OpenAI
 
 from interview_app.config.settings import Settings, get_settings
-from interview_app.llm.model_settings import MODEL_PRESETS, ModelConfig, is_model_preset_key
+from interview_app.llm.model_settings import (
+    MODEL_PRESETS,
+    ModelConfig,
+    is_model_preset_key,
+    resolve_openai_model_id,
+)
 from interview_app.utils.types import LLMResponse, LLMUsage
 
 logger = logging.getLogger("interview_app.llm")
@@ -109,14 +114,24 @@ class LLMClient:
         self._client = OpenAI(api_key=resolved_key.strip())
         self._timeout_s = timeout_s
 
-        # If the configured model is one of our presets, use its defaults for temperature/max_tokens.
-        preset_key = self._settings.openai_model
-        preset: ModelConfig | None = MODEL_PRESETS.get(preset_key) if is_model_preset_key(preset_key) else None
+        # Resolve default model: explicit ctor arg > env OPENAI_MODEL (preset key or raw id).
+        env_model = self._settings.openai_model
+        env_preset: ModelConfig | None = MODEL_PRESETS.get(env_model) if is_model_preset_key(env_model) else None
+        fallback_model = resolve_openai_model_id(env_model)
+        chosen_raw = model if model is not None else fallback_model
+        chosen_preset: ModelConfig | None = (
+            MODEL_PRESETS.get(chosen_raw) if is_model_preset_key(chosen_raw) else None
+        )
+        preset_for_defaults = chosen_preset or env_preset
         self._defaults = ClientParams(
-            model=model or (preset.name if preset else self._settings.openai_model),
-            temperature=temperature if temperature is not None else (preset.default_temperature if preset else self._settings.openai_temperature),
-            top_p=top_p if top_p is not None else (preset.default_top_p if preset else None),
-            max_tokens=max_tokens if max_tokens is not None else (preset.default_max_tokens if preset else None),
+            model=resolve_openai_model_id(chosen_raw),
+            temperature=temperature
+            if temperature is not None
+            else (preset_for_defaults.default_temperature if preset_for_defaults else self._settings.openai_temperature),
+            top_p=top_p if top_p is not None else (preset_for_defaults.default_top_p if preset_for_defaults else None),
+            max_tokens=max_tokens
+            if max_tokens is not None
+            else (preset_for_defaults.default_max_tokens if preset_for_defaults else None),
         )
 
     def generate_response(
@@ -139,8 +154,9 @@ class LLMClient:
 
         `llm_route` identifies the call site for audit logs (e.g. ``interview_generator``).
         """
+        call_model = resolve_openai_model_id(model) if model is not None else self._defaults.model
         resolved = ClientParams(
-            model=model or self._defaults.model,
+            model=call_model,
             temperature=temperature if temperature is not None else self._defaults.temperature,
             top_p=top_p if top_p is not None else self._defaults.top_p,
             max_tokens=max_tokens if max_tokens is not None else self._defaults.max_tokens,

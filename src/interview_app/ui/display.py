@@ -13,6 +13,7 @@ from typing import Any
 import streamlit as st
 
 from interview_app.app.ui_settings import UISettings
+from interview_app.llm.model_settings import resolve_openai_model_id, sidebar_label_for_preset
 from interview_app.cv.models import (
     CVAnalysisBundle,
     CVPracticeBundle,
@@ -395,11 +396,11 @@ def show_guardrail_summary(*, guardrails: dict[str, GuardrailResult]) -> None:
 
 
 def show_prompt_debug(*, system_prompt: str, user_prompt: str) -> None:
-    """Show the exact prompts sent to the model (opt-in debug)."""
-    with st.expander("Prompts (debug)", expanded=False):
-        st.markdown("**System**")
+    """Show the exact effective prompts sent to the model (opt-in sidebar debug)."""
+    with st.expander("Effective prompts (debug)", expanded=False):
+        st.markdown("**Effective system prompt**")
         st.code(system_prompt, language="markdown")
-        st.markdown("**User**")
+        st.markdown("**Effective user prompt**")
         st.code(user_prompt, language="markdown")
 
 
@@ -419,6 +420,8 @@ def show_settings_debug(
         "job_description_len": len(settings.job_description or ""),
         "prompt_strategy": settings.prompt_strategy,
         "model_preset": settings.model_preset,
+        "model_label": sidebar_label_for_preset(settings.model_preset),
+        "resolved_openai_model": resolve_openai_model_id(settings.model_preset),
         "temperature": settings.temperature,
         "top_p": settings.top_p,
         "max_tokens": settings.max_tokens,
@@ -426,7 +429,7 @@ def show_settings_debug(
     if extra:
         payload["extra"] = extra
 
-    with st.expander("Debug", expanded=False):
+    with st.expander("Settings snapshot (debug)", expanded=False):
         st.code(json.dumps(payload, indent=2), language="json")
 
 

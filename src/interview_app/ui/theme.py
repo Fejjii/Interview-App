@@ -13,6 +13,7 @@ import html
 import streamlit as st
 
 from interview_app.app.ui_settings import UISettings, label_for_prompt_strategy
+from interview_app.llm.model_settings import sidebar_label_for_preset
 
 _FONT_IMPORT = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -973,7 +974,7 @@ def render_configuration_pill_bar(*, settings: UISettings) -> str:
         _pill(settings.persona),
         _pill(f"Prompt · {label_for_prompt_strategy(settings.prompt_strategy)}"),
         _pill(diff_note),
-        _pill(settings.model_preset),
+        _pill(sidebar_label_for_preset(settings.model_preset)),
         _pill(f"Temperature · {settings.temperature:.2f}"),
         _pill(f"Top P · {settings.top_p:.2f}"),
         _pill(f"Max Tokens · {settings.max_tokens}"),

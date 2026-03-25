@@ -263,6 +263,15 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
                     openai_api_key=_session_openai_key(),
                 )
                 append_message("assistant", result.assistant_message)
+                if result.llm_debug is not None:
+                    st.session_state["ia_mock_last_llm_debug"] = {
+                        "system_prompt": result.llm_debug.system_prompt,
+                        "user_prompt": result.llm_debug.user_prompt,
+                        "model": result.llm_debug.model,
+                        "temperature": result.llm_debug.temperature,
+                        "top_p": result.llm_debug.top_p,
+                        "max_tokens": result.llm_debug.max_tokens,
+                    }
             except Exception as exc:
                 msg = safe_user_message(exc)
                 append_message("assistant", f"Sorry, {msg}")
@@ -270,6 +279,19 @@ def _render_mock_interview_tab(settings: UISettings) -> None:
         st.rerun()
 
     if settings.show_debug:
+        dbg = st.session_state.get("ia_mock_last_llm_debug")
+        if isinstance(dbg, dict) and dbg.get("system_prompt") and dbg.get("user_prompt"):
+            top_p = dbg.get("top_p")
+            top_p_s = f"{float(top_p):.2f}" if top_p is not None else "default"
+            with st.expander("Last mock interview LLM call (debug)", expanded=False):
+                st.caption(
+                    f"Model **{dbg.get('model', '')}** · temperature={dbg.get('temperature')} · "
+                    f"top_p={top_p_s} · max_tokens={dbg.get('max_tokens')}"
+                )
+                show_prompt_debug(
+                    system_prompt=str(dbg["system_prompt"]),
+                    user_prompt=str(dbg["user_prompt"]),
+                )
         show_settings_debug(
             settings=settings, extra={"message_count": len(messages)}
         )

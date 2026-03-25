@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from interview_app.app.interview_form_config import truncate_job_description, validate_role_title
+from interview_app.llm.model_settings import resolve_openai_model_id
 from interview_app.llm.openai_client import LLMClient
 from interview_app.prompts.personas import get_persona_evaluation_rubric, get_persona_prompt
 from interview_app.prompts.prompt_strategies import evaluation_coaching_directive
@@ -205,6 +206,7 @@ def evaluate_answer(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            model=resolve_openai_model_id(model),
             llm_route=_SERVICE_NAME,
         )
     except Exception as exc:

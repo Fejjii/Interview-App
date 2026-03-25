@@ -1,7 +1,7 @@
 """Streamlit sidebar: deployment, appearance, role, interview setup, saved sessions.
 
-Model preset remains fixed to the default mini preset; temperature, top-p, and max tokens
-are user-controlled in the Generation section and flow through `UISettings` to the LLM.
+Model preset, question difficulty mode, sampling parameters, and optional prompt debug
+flow through `UISettings` into services and the OpenAI client.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from interview_app.app.interview_form_config import (
     build_focus_options,
     default_focus_for_round,
     default_persona_for_round,
+    QUESTION_DIFFICULTY_SIDEBAR_MODES,
     infer_difficulty_from_context,
     role_title_placeholder,
     validate_role_title,
@@ -34,7 +35,12 @@ from interview_app.app.ui_settings import (
 )
 from interview_app.app.usage_mode import KEY_BYO_KEY_HINT, KEY_USAGE_MODE, UsageMode
 from interview_app.llm import MODEL_PRESETS
-from interview_app.llm.model_settings import ModelConfig
+from interview_app.llm.model_settings import (
+    DEFAULT_MODEL_PRESET_KEY,
+    MODEL_PRESET_LABELS,
+    MODEL_PRESET_SIDEBAR_OPTIONS,
+    ModelConfig,
+)
 from interview_app.prompts.personas import PERSONA_KEYS
 from interview_app.storage.sessions import (
     delete_all_sessions,
@@ -178,6 +184,16 @@ def render_sidebar_configuration() -> UISettings:
         help="Who is asking and how they evaluate.",
     )
 
+    if "ia_question_difficulty_mode" not in st.session_state:
+        st.session_state.ia_question_difficulty_mode = QUESTION_DIFFICULTY_SIDEBAR_MODES[0]
+    sb.selectbox(
+        "Question difficulty",
+        options=list(QUESTION_DIFFICULTY_SIDEBAR_MODES),
+        key="ia_question_difficulty_mode",
+        help="Auto infers level from seniority and round. Easy / Medium / Hard fix the calibrated level for "
+        "Interview Questions, mock interview, and Feedback / Evaluation.",
+    )
+
     lang_options = ["Auto (detect)"] + [
         f"{name} ({code})" for code, name in SUPPORTED_LANGUAGES.items()
     ]
@@ -230,22 +246,51 @@ def render_sidebar_configuration() -> UISettings:
     )
     prompt_strategy = prompt_strategy_key_from_label(selected_label)
 
-    preset_keys = list(MODEL_PRESETS.keys())
-    model_preset = "gpt-4o-mini" if "gpt-4o-mini" in preset_keys else preset_keys[0]
-    preset = MODEL_PRESETS[model_preset]
-    t0, p0, m0 = _session_defaults_for_preset(preset)
-
-    if "ia_gen_temperature" not in st.session_state:
-        st.session_state.ia_gen_temperature = t0
-    if "ia_gen_top_p" not in st.session_state:
-        st.session_state.ia_gen_top_p = p0
-    if "ia_gen_max_tokens" not in st.session_state:
-        st.session_state.ia_gen_max_tokens = m0
+    allowed_model_keys = tuple(k for _, k in MODEL_PRESET_SIDEBAR_OPTIONS)
+    if "ia_model_preset_select" not in st.session_state:
+        st.session_state.ia_model_preset_select = DEFAULT_MODEL_PRESET_KEY
 
     sb.divider()
     _sidebar_section_title(
         "Generation",
-        "Sampling parameters for LLM calls (questions, chat, and evaluation).",
+        "Model, sampling parameters, and optional prompt inspection for all LLM calls.",
+    )
+    sb.selectbox(
+        "Model",
+        options=list(allowed_model_keys),
+        key="ia_model_preset_select",
+        format_func=lambda k: MODEL_PRESET_LABELS[k],
+        help="OpenAI model for interview questions, mock interview, feedback, and CV prep.",
+    )
+    model_preset = str(st.session_state.ia_model_preset_select)
+    if model_preset not in MODEL_PRESETS:
+        model_preset = DEFAULT_MODEL_PRESET_KEY
+        st.session_state.ia_model_preset_select = DEFAULT_MODEL_PRESET_KEY
+
+    tracked = st.session_state.get("_ia_model_preset_track")
+    if tracked != model_preset:
+        preset_cfg = MODEL_PRESETS[model_preset]
+        t_sync, p_sync, m_sync = _session_defaults_for_preset(preset_cfg)
+        st.session_state.ia_gen_temperature = t_sync
+        st.session_state.ia_gen_top_p = p_sync
+        st.session_state.ia_gen_max_tokens = m_sync
+        st.session_state._ia_model_preset_track = model_preset
+
+    preset = MODEL_PRESETS[model_preset]
+    if "ia_gen_temperature" not in st.session_state:
+        t0, p0, m0 = _session_defaults_for_preset(preset)
+        st.session_state.ia_gen_temperature = t0
+    if "ia_gen_top_p" not in st.session_state:
+        _, p0, _ = _session_defaults_for_preset(preset)
+        st.session_state.ia_gen_top_p = p0
+    if "ia_gen_max_tokens" not in st.session_state:
+        _, _, m0 = _session_defaults_for_preset(preset)
+        st.session_state.ia_gen_max_tokens = m0
+
+    sb.checkbox(
+        "Show debug prompts",
+        key="ia_show_debug",
+        help="Show effective system/user prompts and parameters on workspace tabs when available.",
     )
     sb.slider(
         "Temperature",
@@ -326,11 +371,11 @@ def render_sidebar_configuration() -> UISettings:
     response_language = st.session_state.get("response_language") or DEFAULT_LANGUAGE
     _, role_title_trimmed = validate_role_title(role_title_raw)
 
-    question_difficulty_mode = "Auto"
+    question_difficulty_mode = str(st.session_state.get("ia_question_difficulty_mode", "Auto"))
     temperature = float(st.session_state.ia_gen_temperature)
     top_p = float(st.session_state.ia_gen_top_p)
     max_tokens = int(st.session_state.ia_gen_max_tokens)
-    show_debug = False
+    show_debug = bool(st.session_state.get("ia_show_debug", False))
     effective_difficulty = infer_difficulty_from_context(
         seniority=seniority,
         interview_round=interview_round,

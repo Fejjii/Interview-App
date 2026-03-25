@@ -13,10 +13,11 @@ This document explains what has been developed (step-by-step), how the app is st
 **Features:**
 
 - **5 prompt strategies:** zero_shot, few_shot, chain_of_thought, structured_output, role_based — selectable in the sidebar to compare outputs.
-- **Model selection:** gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini.
-- **Tunable LLM settings:** temperature and max tokens in the sidebar, passed to the OpenAI client.
+- **Model selection:** GPT-4.1, GPT-4.1 mini, GPT-4.1 nano, GPT-4o, and GPT-4o mini — chosen in the sidebar **Generation** section; the same preset drives Interview Questions, mock interview, feedback, and CV prep.
+- **Question difficulty:** sidebar **Question difficulty** with **Auto** (inference from seniority and round) or fixed **Easy / Medium / Hard** for question generation and mock interview paths.
+- **Tunable LLM settings:** temperature, top-p, and max tokens in the sidebar, passed through to every `LLMClient` call.
 - **Security guardrails:** length/empty checks, prompt-injection heuristics, secret redaction; requests can be blocked and the result shown in the UI.
-- **Debug view:** optional “Show debug” to see system + user prompts and settings used for each run.
+- **Debug view:** optional **Show debug prompts** in the sidebar — effective system/user prompts (where available), resolved model id, temperature, top-p, max tokens, and a JSON settings snapshot on workspace tabs.
 
 ---
 

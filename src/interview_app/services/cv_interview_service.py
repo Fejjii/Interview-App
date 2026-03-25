@@ -40,6 +40,7 @@ from interview_app.cv.prompt_builders import (
     user_prompt_cv_practice_questions_only,
 )
 from interview_app.cv.text_cleaning import normalize_cv_text
+from interview_app.llm.model_settings import resolve_openai_model_id
 from interview_app.llm.openai_client import LLMClient
 from interview_app.security.guards import GuardrailResult
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
@@ -529,6 +530,7 @@ def run_cv_interview_pipeline(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            model=resolve_openai_model_id(model),
             llm_route="cv_interview_generation",
         )
     except Exception as exc:
@@ -786,6 +788,7 @@ def run_cv_practice_evaluation(
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
+            model=resolve_openai_model_id(model),
             llm_route="cv_practice_evaluation",
         )
     except Exception as exc:

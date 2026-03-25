@@ -76,7 +76,7 @@ flowchart LR
 |------|------|
 | `app/main.py` | Composition root: theme, sidebar, main content. |
 | `app/layout.py` | Hero, configuration bar, workspace tabs, chat and CV panels. |
-| `app/controls.py` | Sidebar → `UISettings`; saved sessions list/load (scoped). |
+| `app/controls.py` | Sidebar → `UISettings` (model preset, question difficulty mode, prompt strategy, generation parameters, **Show debug prompts**); saved sessions list/load (scoped). |
 | `app/usage_mode.py` | Demo vs BYO enum, key validation, mask hint, `openai_api_key_for_llm`. |
 | `ui/usage_mode_panel.py` | Session setup UI: Apply, reset, masked BYO input. |
 | `app/session_reset.py` | Full workspace reset on usage mode apply. |

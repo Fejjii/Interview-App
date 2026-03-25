@@ -77,6 +77,7 @@ def clear_messages() -> None:
     init_session_state()
     st.session_state.messages = []
     st.session_state.last_scores = []
+    st.session_state.pop("ia_mock_last_llm_debug", None)
     clear_mock_interview_runtime_state(st.session_state)
 
 

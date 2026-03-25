@@ -10,7 +10,7 @@ A **Streamlit** web app that helps candidates practice technical and behavioral 
 
 | Area | What it does |
 |------|----------------|
-| **Sidebar configuration** | Role category, seniority, job description, interview round, focus, interviewer persona, **prompt strategy**, response language, and generation settings (model preset, temperature, top-p, max tokens). Shortcuts for generating questions, opening the mock interview, resetting the transcript, and managing saved sessions. |
+| **Sidebar configuration** | Role category, seniority, job description, interview round, focus, interviewer persona, **question difficulty** (Auto or fixed Easy / Medium / Hard), **prompt strategy**, response language, **model** (GPT-4.1 family, GPT-4o, GPT-4o mini), generation sliders (temperature, top-p, max tokens), optional **Show debug prompts**, shortcuts, and saved sessions. |
 | **Deployment (sidebar)** | Collapsible guidance and links for hosting the app (e.g. Streamlit Community Cloud, Azure, AWS, GCP, Docker). See also **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for container and cloud notes. |
 | **Mock interview** | Turn-by-turn coaching: greetings, explicit “start interview” flows, generated questions, answer evaluation with follow-ups. |
 | **Interview questions** | Structured questions from your current setup, optional **Compare Prompt Strategies**, optional debug prompts. |
@@ -144,7 +144,7 @@ Edit `.env` (never commit it). See **[Environment variables](#environment-variab
 | Variable | Purpose | Notes |
 |----------|---------|--------|
 | `OPENAI_API_KEY` | OpenAI API access | **Required** for live LLM calls |
-| `OPENAI_MODEL` | Default model name or preset key | Default: `gpt-4o-mini` |
+| `OPENAI_MODEL` | Default model when the client is constructed without an explicit model; can be any preset key (`gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`) or a raw model id | Default: `gpt-4o-mini` |
 | `OPENAI_TEMPERATURE` | Default sampling temperature | Default: `0.2` |
 | `APP_ENV` | Logical environment label | e.g. `dev`, `prod` |
 | `SESSIONS_DIR` | Where session JSON files are stored | Default: `data/sessions` (relative to process CWD) |
