@@ -22,6 +22,12 @@ from interview_app.security.guards import protect_system_prompt
 from interview_app.security.pipeline import run_input_pipeline, run_output_pipeline
 from interview_app.services.answer_evaluator import evaluate_answer
 from interview_app.services.interview_generator import generate_questions
+from interview_app.services.context_manager import (
+    build_question_generation_context_suffix,
+    flatten_session_context_for_evaluator,
+    merge_message_into_session_context,
+    user_requests_context_based_question,
+)
 from interview_app.services.mock_interview_flow import (
     InterviewState,
     MockInterviewPhase,
@@ -142,6 +148,9 @@ def run_turn(
             restart_ack="Starting fresh — here’s a new opening question.",
         )
 
+    if session_state is not None:
+        merge_message_into_session_context(session_state, last_user_content)
+
     assistant_count = sum(1 for m in messages if m.role == "assistant")
 
     if assistant_count == 0:
@@ -238,6 +247,13 @@ def _resolve_job_description_for_chat(
     return ""
 
 
+def _latest_user_text(messages: list[ChatMessage]) -> str:
+    for m in reversed(messages):
+        if m.role == "user":
+            return m.content or ""
+    return ""
+
+
 def _normalize_question_text(text: str, raw_fallback: str) -> str:
     text = (text or "").strip()
     json_first = first_question_text_from_output(text)
@@ -281,6 +297,8 @@ def _generate_next_question_turn(
 
     job_description = _resolve_job_description_for_chat(settings, messages)
     focus = settings.interview_focus if interview_focus is None else interview_focus
+    last_user = _latest_user_text(messages)
+    ctx_suffix = build_question_generation_context_suffix(last_user, session_state)
 
     result = generate_questions(
         role_category=settings.role_category,
@@ -301,6 +319,7 @@ def _generate_next_question_turn(
         session_state=session_state,
         skip_session_rate_limit=True,
         openai_api_key=openai_api_key,
+        mock_interview_context_suffix=ctx_suffix,
     )
 
     if not result.ok or result.response is None:
@@ -419,7 +438,8 @@ def _interviewer_clarification_or_meta_turn(
     openai_api_key: str | None = None,
 ) -> ChatTurnResult:
     """In-character reply for clarification / meta / experience digression (no scoring)."""
-    topics = get_candidate_topics(session_state)
+    ctx_flat = flatten_session_context_for_evaluator(session_state)
+    topics = list(dict.fromkeys([*ctx_flat, *get_candidate_topics(session_state)]))[:24]
     system = protect_system_prompt(
         build_interviewer_prompt(
             settings.persona,
@@ -567,6 +587,7 @@ def _evaluate_and_follow_up(
     """Evaluate the user's answer and return structured feedback plus one follow-up question."""
     fresh_topics = extract_candidate_topics(last_user_content)
     append_candidate_topics(session_state, fresh_topics)
+    append_candidate_topics(session_state, flatten_session_context_for_evaluator(session_state))
     merged_topics = get_candidate_topics(session_state)
     role = (settings.role_title or "").strip() or "your role"
     hints = generate_contextual_follow_up_hints(

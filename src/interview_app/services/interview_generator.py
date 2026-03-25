@@ -61,6 +61,7 @@ def generate_questions(
     session_state: dict[str, Any] | None = None,
     skip_session_rate_limit: bool = False,
     openai_api_key: str | None = None,
+    mock_interview_context_suffix: str = "",
 ) -> GenerateQuestionsResult:
     """
     Generate interview questions using a selected prompt strategy.
@@ -69,6 +70,9 @@ def generate_questions(
 
     When ``skip_session_rate_limit`` is True, the session rate-limit step is skipped for
     this service (e.g. chat already consumed one unit for the same user-visible turn).
+
+    ``mock_interview_context_suffix`` is appended to the user prompt when non-empty (mock
+    interview only): candidate tools/projects for context-aware follow-up questions.
     """
 
     guards: dict[str, GuardrailResult] = {}
@@ -138,6 +142,12 @@ def generate_questions(
     )
 
     system_prompt = protect_system_prompt(prompt.system_prompt)
+    user_prompt_body = prompt.user_prompt.rstrip()
+    suffix = (mock_interview_context_suffix or "").strip()
+    if suffix:
+        user_prompt_body = (
+            f"{user_prompt_body}\n\n---\nAdditional instructions for this request:\n{suffix}\n"
+        )
 
     try:
         client = LLMClient(
@@ -149,7 +159,7 @@ def generate_questions(
         )
         resp = client.generate_response(
             system_prompt=system_prompt,
-            user_prompt=prompt.user_prompt,
+            user_prompt=user_prompt_body,
             top_p=top_p,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -189,7 +199,7 @@ def generate_questions(
         guardrails=guards,
         prompt=PromptBuildResult(
             system_prompt=system_prompt,
-            user_prompt=prompt.user_prompt,
+            user_prompt=user_prompt_body,
             template_name=prompt.template_name,
         ),
     )

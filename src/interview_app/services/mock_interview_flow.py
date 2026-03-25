@@ -205,6 +205,31 @@ _EXPERIENCE_DIGRESSION_MARKERS: tuple[str, ...] = (
     "sidebar",
 )
 
+_CONTEXT_LINKED_QUESTION_PHRASES: tuple[str, ...] = (
+    "related to that",
+    "related to this",
+    "about that project",
+    "about this project",
+    "question related",
+    "ask me a question related",
+    "ask a question related",
+    "ask me something about",
+    "about what i said",
+    "based on what i said",
+    "based on my experience",
+    "about my experience",
+    "dig deeper",
+    "drill into",
+    "follow up on that",
+    "follow-up on that",
+    "something technical about",
+)
+
+
+def _user_wants_context_linked_question(t: str) -> bool:
+    """User wants the next question tied to their prior story (not a clarification)."""
+    return any(p in t for p in _CONTEXT_LINKED_QUESTION_PHRASES)
+
 
 def clear_mock_interview_runtime_state(session_state: MutableMapping[str, Any] | None) -> None:
     """Reset mock interview keys (no-op if session_state is None)."""
@@ -214,6 +239,9 @@ def clear_mock_interview_runtime_state(session_state: MutableMapping[str, Any] |
     session_state[KEY_PENDING_QUESTION] = None
     session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
     session_state[KEY_CANDIDATE_TOPICS] = []
+    from interview_app.services.context_manager import clear_session_interview_context
+
+    clear_session_interview_context(session_state)
 
 
 def init_mock_interview_runtime_state(session_state: MutableMapping[str, Any]) -> None:
@@ -231,6 +259,9 @@ def init_mock_interview_runtime_state(session_state: MutableMapping[str, Any]) -
         else:
             session_state[KEY_INTERVIEW_STATE] = InterviewState.GREETING.value
     session_state.setdefault(KEY_CANDIDATE_TOPICS, [])
+    from interview_app.services.context_manager import init_session_interview_context
+
+    init_session_interview_context(session_state)
 
 
 def get_interview_state(session_state: MutableMapping[str, Any] | None) -> InterviewState:
@@ -556,6 +587,8 @@ def detect_user_turn_type(message: str, *, pending_question: str | None = None) 
         return UserTurnType.OTHER  # handled in chat_service via ``user_requests_restart`` before routing
     if _is_control_instruction(t):
         return UserTurnType.CONTROL
+    if _user_wants_context_linked_question(t):
+        return UserTurnType.CONTROL
     if pending_question and _is_clarification(t, message):
         return UserTurnType.CLARIFICATION
     if pending_question and _is_meta(t, message):
@@ -875,9 +908,7 @@ def sync_mock_interview_session_from_messages(
             phase=MockInterviewPhase.AWAITING_ANSWER,
             interview_state=InterviewState.WAITING_FOR_ANSWER,
         )
-        return
-
-    if (
+    elif (
         "**Overall score" in last_assistant
         or "**Overall Score" in last_assistant
         or "**Score:" in last_assistant
@@ -889,12 +920,15 @@ def sync_mock_interview_session_from_messages(
             phase=MockInterviewPhase.FEEDBACK_GIVEN,
             interview_state=InterviewState.GREETING,
         )
-        return
+    else:
+        pending = last_assistant.strip()
+        set_mock_state(
+            session_state,
+            pending_question=pending,
+            phase=MockInterviewPhase.AWAITING_ANSWER,
+            interview_state=InterviewState.WAITING_FOR_ANSWER,
+        )
 
-    pending = last_assistant.strip()
-    set_mock_state(
-        session_state,
-        pending_question=pending,
-        phase=MockInterviewPhase.AWAITING_ANSWER,
-        interview_state=InterviewState.WAITING_FOR_ANSWER,
-    )
+    from interview_app.services.context_manager import rebuild_session_interview_context_from_transcript
+
+    rebuild_session_interview_context_from_transcript(session_state, messages)
