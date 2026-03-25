@@ -102,25 +102,22 @@ def _render_section_heading(title: str, subtitle: str) -> None:
 
 def render_workspace_navigation(tab_labels: list[str]) -> None:
     """
-    Primary workspace navigation (segmented control).
+    Primary workspace navigation (`st.segmented_control`).
 
-    Uses `ia_workspace_tab` session state so sidebar shortcuts stay in sync.
-    (Streamlit `st.tabs` cannot be driven from session state; segmented buttons do.)
+    Uses session key ``ia_workspace_tab`` so sidebar shortcuts stay in sync.
+    Segmented control renders with ``stButtonGroup`` and respects the app theme
+    better than separate secondary ``st.button`` widgets (Streamlit 1.55+).
     """
     st.markdown('<div class="ia-workspace-nav-label">Workspace</div>', unsafe_allow_html=True)
     with st.container(border=True):
-        cols = st.columns(len(tab_labels), gap="small")
-        for i, label in enumerate(tab_labels):
-            with cols[i]:
-                active = st.session_state.ia_workspace_tab == label
-                if st.button(
-                    label,
-                    key=f"ia_ws_nav_{i}",
-                    use_container_width=True,
-                    type="primary" if active else "secondary",
-                ):
-                    st.session_state.ia_workspace_tab = label
-                    st.rerun()
+        st.segmented_control(
+            "Workspace",
+            options=tab_labels,
+            selection_mode="single",
+            key="ia_workspace_tab",
+            label_visibility="collapsed",
+            width="stretch",
+        )
     st.divider()
 
 

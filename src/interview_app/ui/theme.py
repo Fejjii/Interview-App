@@ -78,6 +78,10 @@ _LIGHT_VARS = """
     --st-tab-inactive: #64748b;
     --st-tab-active: #0f172a;
     --st-tab-hover-bg: rgba(15,118,110,0.08);
+    --st-btn-disabled-bg: #e2e8f0;
+    --st-btn-disabled-text: #475569;
+    --st-btn-disabled-border: #cbd5e1;
+    --st-segmented-track-bg: #f1f5f9;
 """
 
 _DARK_VARS = """
@@ -114,17 +118,17 @@ _DARK_VARS = """
     --accent-foreground: #042f2e;
     --input-background: #1a2438;
     --input-foreground: #f8fafc;
-    --placeholder: #8b9cb8;
+    --placeholder: #a3b4cc;
     --st-surface: #151d30;
     --st-surface-elevated: #1e293b;
     --st-input-bg: #1a2438;
     --st-input-border: #4b5e78;
     --st-input-border-focus: #2dd4bf;
     --st-input-text: #f8fafc;
-    --st-placeholder: #8b9cb8;
+    --st-placeholder: #a3b4cc;
     --st-label: #e8edf7;
     --st-caption: #b4c2d9;
-    --st-muted: #8b9cb8;
+    --st-muted: #a8b9cc;
     --st-dropdown-bg: #1a2438;
     --st-dropdown-border: #4b5e78;
     --st-dropdown-hover: #243047;
@@ -140,6 +144,10 @@ _DARK_VARS = """
     --st-tab-inactive: #b4c2d9;
     --st-tab-active: #f8fafc;
     --st-tab-hover-bg: rgba(45,212,191,0.12);
+    --st-btn-disabled-bg: #283548;
+    --st-btn-disabled-text: #d1dae8;
+    --st-btn-disabled-border: #4b5e78;
+    --st-segmented-track-bg: #1a2438;
 """
 
 
@@ -331,17 +339,60 @@ div[data-baseweb="popover"] [role="option"] span {
     color: var(--accent) !important;
 }
 
-/* ----- Buttons ----- */
+/* ----- Buttons (Streamlit 1.55+ Base Web: `kind` is often NOT on the DOM) ----- */
+[data-testid="stSidebar"] [data-testid="stButton"] button,
+[data-testid="stMain"] [data-testid="stButton"] button,
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] button,
+[data-testid="stMain"] [data-testid="stDownloadButton"] button {
+    background-color: var(--st-btn-secondary-bg) !important;
+    background-image: none !important;
+    color: var(--st-btn-secondary-text) !important;
+    border: 1px solid var(--st-btn-secondary-border) !important;
+    -webkit-text-fill-color: var(--st-btn-secondary-text) !important;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button *,
+[data-testid="stMain"] [data-testid="stButton"] button *,
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] button *,
+[data-testid="stMain"] [data-testid="stDownloadButton"] button * {
+    color: inherit !important;
+    -webkit-text-fill-color: inherit !important;
+    opacity: 1 !important;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button:hover:not(:disabled),
+[data-testid="stMain"] [data-testid="stButton"] button:hover:not(:disabled),
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] button:hover:not(:disabled),
+[data-testid="stMain"] [data-testid="stDownloadButton"] button:hover:not(:disabled) {
+    background-color: var(--st-surface-elevated) !important;
+    border-color: var(--accent-light) !important;
+    filter: brightness(1.02) !important;
+}
+/* Legacy / future: explicit kind attribute */
 [data-testid="stSidebar"] button[kind="primary"],
 [data-testid="stMain"] button[kind="primary"],
 [data-testid="stSidebar"] .stButton > button[kind="primary"],
-[data-testid="stMain"] .stButton > button[kind="primary"] {
+[data-testid="stMain"] .stButton > button[kind="primary"],
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] button[kind="primary"],
+[data-testid="stMain"] [data-testid="stDownloadButton"] button[kind="primary"],
+/* Primary actions keyed in the Python app (see layout.py, usage_mode_panel.py) */
+[data-testid="stMain"] .st-key-main_save_session button,
+[data-testid="stMain"] .st-key-btn_generate_questions button,
+[data-testid="stMain"] .st-key-cv_btn_practice button,
+[data-testid="stMain"] .st-key-cv_btn_evaluate_practice button,
+[data-testid="stMain"] .st-key-btn_evaluate_answer button,
+[data-testid="stSidebar"] .st-key-um_apply_btn button {
     background-color: var(--st-btn-primary-bg) !important;
     color: var(--st-btn-primary-text) !important;
     border: 1px solid var(--st-btn-primary-bg) !important;
+    -webkit-text-fill-color: var(--st-btn-primary-text) !important;
 }
-[data-testid="stSidebar"] button[kind="primary"]:hover,
-[data-testid="stMain"] button[kind="primary"]:hover {
+[data-testid="stSidebar"] button[kind="primary"]:hover:not(:disabled),
+[data-testid="stMain"] button[kind="primary"]:hover:not(:disabled),
+[data-testid="stMain"] .st-key-main_save_session button:hover:not(:disabled),
+[data-testid="stMain"] .st-key-btn_generate_questions button:hover:not(:disabled),
+[data-testid="stMain"] .st-key-cv_btn_practice button:hover:not(:disabled),
+[data-testid="stMain"] .st-key-cv_btn_evaluate_practice button:hover:not(:disabled),
+[data-testid="stMain"] .st-key-btn_evaluate_answer button:hover:not(:disabled),
+[data-testid="stSidebar"] .st-key-um_apply_btn button:hover:not(:disabled) {
     filter: brightness(1.08) !important;
 }
 [data-testid="stSidebar"] button[kind="secondary"],
@@ -352,21 +403,64 @@ div[data-baseweb="popover"] [role="option"] span {
     color: var(--st-btn-secondary-text) !important;
     border: 1px solid var(--st-btn-secondary-border) !important;
 }
-[data-testid="stSidebar"] button[kind="secondary"]:hover,
-[data-testid="stMain"] button[kind="secondary"]:hover {
-    background-color: var(--st-surface-elevated) !important;
-    border-color: var(--accent-light) !important;
-}
 [data-testid="stSidebar"] button:disabled,
 [data-testid="stMain"] button:disabled,
 [data-testid="stSidebar"] .stButton > button:disabled,
-[data-testid="stMain"] .stButton > button:disabled {
+[data-testid="stMain"] .stButton > button:disabled,
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] button:disabled,
+[data-testid="stMain"] [data-testid="stDownloadButton"] button:disabled {
     opacity: 1 !important;
     filter: none !important;
     cursor: not-allowed !important;
-    background-color: var(--st-surface-elevated) !important;
-    color: var(--st-muted) !important;
-    border-color: var(--st-input-border) !important;
+    background-color: var(--st-btn-disabled-bg) !important;
+    color: var(--st-btn-disabled-text) !important;
+    border-color: var(--st-btn-disabled-border) !important;
+    -webkit-text-fill-color: var(--st-btn-disabled-text) !important;
+}
+
+/* ----- Segmented control (st.segmented_control → stButtonGroup) ----- */
+[data-testid="stSidebar"] [data-testid="stButtonGroup"],
+[data-testid="stMain"] [data-testid="stButtonGroup"] {
+    background-color: var(--st-segmented-track-bg) !important;
+    border: 1px solid var(--st-btn-secondary-border) !important;
+    border-radius: var(--radius-lg) !important;
+    padding: 0.2rem !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button,
+[data-testid="stMain"] [data-testid="stButtonGroup"] button {
+    background-color: transparent !important;
+    background-image: none !important;
+    color: var(--st-tab-inactive) !important;
+    border: 1px solid transparent !important;
+    -webkit-text-fill-color: var(--st-tab-inactive) !important;
+    font-weight: 500 !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button:hover:not(:disabled),
+[data-testid="stMain"] [data-testid="stButtonGroup"] button:hover:not(:disabled) {
+    background-color: var(--st-tab-hover-bg) !important;
+    color: var(--st-tab-active) !important;
+    -webkit-text-fill-color: var(--st-tab-active) !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button[aria-checked="true"],
+[data-testid="stMain"] [data-testid="stButtonGroup"] button[aria-checked="true"] {
+    background-color: var(--st-btn-primary-bg) !important;
+    color: var(--st-btn-primary-text) !important;
+    border-color: var(--st-btn-primary-bg) !important;
+    -webkit-text-fill-color: var(--st-btn-primary-text) !important;
+    font-weight: 600 !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button *,
+[data-testid="stMain"] [data-testid="stButtonGroup"] button * {
+    color: inherit !important;
+    -webkit-text-fill-color: inherit !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button:disabled,
+[data-testid="stMain"] [data-testid="stButtonGroup"] button:disabled {
+    background-color: transparent !important;
+    color: var(--st-btn-disabled-text) !important;
+    -webkit-text-fill-color: var(--st-btn-disabled-text) !important;
+    border-color: transparent !important;
+    opacity: 0.85 !important;
 }
 
 /* ----- Chat composer ----- */
@@ -555,7 +649,7 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--text-tertiary);
+    color: var(--st-caption);
     margin: 0.25rem 0 0.5rem 0;
 }}
 .ia-section-head {{
