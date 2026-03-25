@@ -164,7 +164,7 @@ def load_session(
 ) -> tuple[SessionMeta, list[dict]] | None:
     """
     Load a session by id within the current scope. Returns (SessionMeta, messages) or None.
-    messages are list of {role, content}.
+    messages are list of {role, content} plus optional timestamp (ISO UTC).
     """
     f = _find_session_file(session_id, session_state)
     if f is None:
@@ -189,7 +189,7 @@ def save_session(
     """
     Save session to JSON in the current usage scope. If session_id is None, generate UUID.
 
-    messages should be list of {role, content}. Returns the session id used.
+    messages should be list of dicts (role, content; optional timestamp). Returns session id.
     """
     scoped = _scoped_storage_dir(session_state)
     if scoped is None:

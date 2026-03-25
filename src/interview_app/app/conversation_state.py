@@ -9,6 +9,8 @@ Helpers: get_messages, append_message, clear_messages, load_session_into_state.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 from interview_app.app.ui_settings import UISettings
@@ -44,7 +46,13 @@ def get_messages() -> list[ChatMessage]:
     out = []
     for m in raw:
         if isinstance(m, dict):
-            out.append(ChatMessage(role=m.get("role", "user"), content=m.get("content", "")))
+            out.append(
+                ChatMessage(
+                    role=m.get("role", "user"),
+                    content=m.get("content", ""),
+                    timestamp=m.get("timestamp"),
+                )
+            )
         elif isinstance(m, ChatMessage):
             out.append(m)
         else:
@@ -52,10 +60,16 @@ def get_messages() -> list[ChatMessage]:
     return out
 
 
-def append_message(role: str, content: str) -> None:
+def _utc_timestamp_iso() -> str:
+    """UTC ISO-8601 ending in Z (filesystem / JSON friendly)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def append_message(role: str, content: str, *, timestamp: str | None = None) -> None:
     """Append a single message to session state. Role is 'user' or 'assistant'."""
     init_session_state()
-    st.session_state.messages.append(ChatMessage(role=role, content=content))
+    ts = timestamp or _utc_timestamp_iso()
+    st.session_state.messages.append(ChatMessage(role=role, content=content, timestamp=ts))
 
 
 def clear_messages() -> None:
@@ -91,7 +105,14 @@ def load_session_into_state(session_id: str, meta: SessionMeta, messages: list[d
     init_session_state()
     st.session_state.current_session_id = session_id
     st.session_state.session_meta = meta
-    loaded = [ChatMessage(role=m.get("role", "user"), content=m.get("content", "")) for m in messages]
+    loaded = [
+        ChatMessage(
+            role=m.get("role", "user"),
+            content=m.get("content", ""),
+            timestamp=m.get("timestamp"),
+        )
+        for m in messages
+    ]
     st.session_state.messages = loaded
     sync_mock_interview_session_from_messages(st.session_state, loaded)
 

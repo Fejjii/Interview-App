@@ -1,8 +1,9 @@
 """
 Custom CSS theme for the Interview Coach UI.
 
-Light/dark mode uses :root variables for custom HTML (hero, pills, cards).
-Streamlit/Base Web widgets require dedicated dark-mode overrides (see _dark_mode_streamlit_overrides).
+Light/dark mode share one :root token system (semantic + Streamlit-facing ``--st-*``).
+Component rules in ``_streamlit_widget_overrides`` always apply and read those tokens so
+widgets, chat, and custom HTML stay aligned when the theme toggles.
 """
 
 from __future__ import annotations
@@ -26,11 +27,11 @@ _LIGHT_VARS = """
     --bg-input: #ffffff;
     --text-primary: #0f172a;
     --text-secondary: #475569;
-    --text-tertiary: #94a3b8;
+    --text-tertiary: #64748b;
     --border-primary: #e2e8f0;
     --border-secondary: #f1f5f9;
     --accent: #0f766e;
-    --accent-light: #14b8a6;
+    --accent-light: #0d9488;
     --accent-bg: #f0fdfa;
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
@@ -44,64 +45,109 @@ _LIGHT_VARS = """
     --info-bg: #eff6ff;
     --header-gradient: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
     --card-gradient: linear-gradient(135deg, rgba(15,118,110,0.03), rgba(20,184,166,0.02));
-"""
-
-# App shell + semantic tokens for Streamlit widget overrides (dark only).
-_DARK_VARS = """
-    --bg-primary: #0b1220;
-    --bg-secondary: #151f32;
-    --bg-tertiary: #243045;
-    --bg-card: #1a2332;
-    --bg-sidebar: #0d1424;
-    --bg-input: #1a2332;
-    --text-primary: #f1f5f9;
-    --text-secondary: #cbd5e1;
-    --text-tertiary: #a8b9d1;
-    --border-primary: #3d4f66;
-    --border-secondary: #243045;
-    --accent: #2dd4bf;
-    --accent-light: #5eead4;
-    --accent-bg: rgba(45,212,191,0.12);
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
-    --success: #4ade80;
-    --success-bg: rgba(74,222,128,0.12);
-    --warning: #fbbf24;
-    --warning-bg: rgba(251,191,36,0.12);
-    --error: #f87171;
-    --error-bg: rgba(248,113,113,0.12);
-    --info: #60a5fa;
-    --info-bg: rgba(96,165,250,0.12);
-    --header-gradient: linear-gradient(135deg, #0d3d38 0%, #134e48 50%, #115e56 100%);
-    --card-gradient: linear-gradient(135deg, rgba(20,184,166,0.06), rgba(15,118,110,0.03));
-    --st-surface: #1a2332;
-    --st-surface-elevated: #243045;
-    --st-input-bg: #1a2332;
-    --st-input-border: #5b6c82;
-    --st-input-border-focus: #2dd4bf;
-    --st-input-text: #f8fafc;
-    --st-placeholder: #9eb0c9;
-    --st-label: #e8eef7;
-    --st-caption: #b6c4d8;
-    --st-muted: #9eb0c9;
-    --st-dropdown-bg: #1a2332;
-    --st-dropdown-border: #5b6c82;
-    --st-dropdown-hover: #2c3b52;
-    --st-dropdown-text: #f8fafc;
+    --surface: #ffffff;
+    --surface-alt: #f8fafc;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --accent-foreground: #f8fafc;
+    --input-background: #ffffff;
+    --input-foreground: #0f172a;
+    --placeholder: #64748b;
+    --st-surface: #ffffff;
+    --st-surface-elevated: #f1f5f9;
+    --st-input-bg: #ffffff;
+    --st-input-border: #cbd5e1;
+    --st-input-border-focus: #0f766e;
+    --st-input-text: #0f172a;
+    --st-placeholder: #64748b;
+    --st-label: #334155;
+    --st-caption: #475569;
+    --st-muted: #64748b;
+    --st-dropdown-bg: #ffffff;
+    --st-dropdown-border: #cbd5e1;
+    --st-dropdown-hover: #f1f5f9;
+    --st-dropdown-text: #0f172a;
     --st-btn-primary-bg: #0f766e;
     --st-btn-primary-text: #f8fafc;
-    --st-btn-secondary-bg: #243045;
+    --st-btn-secondary-bg: #ffffff;
+    --st-btn-secondary-text: #0f172a;
+    --st-btn-secondary-border: #cbd5e1;
+    --st-focus-ring: rgba(15,118,110,0.35);
+    --st-chat-user-bg: #f0fdfa;
+    --st-chat-assistant-bg: #f8fafc;
+    --st-tab-inactive: #64748b;
+    --st-tab-active: #0f172a;
+    --st-tab-hover-bg: rgba(15,118,110,0.08);
+"""
+
+_DARK_VARS = """
+    --bg-primary: #0c1222;
+    --bg-secondary: #141c2f;
+    --bg-tertiary: #1e293b;
+    --bg-card: #151d30;
+    --bg-sidebar: #0a0f1a;
+    --bg-input: #1a2438;
+    --text-primary: #f8fafc;
+    --text-secondary: #e2e8f0;
+    --text-tertiary: #b6c4d8;
+    --border-primary: #3d4d66;
+    --border-secondary: #2a3548;
+    --accent: #2dd4bf;
+    --accent-light: #5eead4;
+    --accent-bg: rgba(45,212,191,0.14);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+    --success: #4ade80;
+    --success-bg: rgba(74,222,128,0.14);
+    --warning: #fbbf24;
+    --warning-bg: rgba(251,191,36,0.14);
+    --error: #f87171;
+    --error-bg: rgba(248,113,113,0.14);
+    --info: #93c5fd;
+    --info-bg: rgba(147,197,253,0.12);
+    --header-gradient: linear-gradient(135deg, #0d3d38 0%, #134e48 50%, #115e56 100%);
+    --card-gradient: linear-gradient(135deg, rgba(45,212,191,0.07), rgba(15,118,110,0.04));
+    --surface: #151d30;
+    --surface-alt: #1a2438;
+    --text-muted: #9eb0c9;
+    --border: #3d4d66;
+    --accent-foreground: #042f2e;
+    --input-background: #1a2438;
+    --input-foreground: #f8fafc;
+    --placeholder: #8b9cb8;
+    --st-surface: #151d30;
+    --st-surface-elevated: #1e293b;
+    --st-input-bg: #1a2438;
+    --st-input-border: #4b5e78;
+    --st-input-border-focus: #2dd4bf;
+    --st-input-text: #f8fafc;
+    --st-placeholder: #8b9cb8;
+    --st-label: #e8edf7;
+    --st-caption: #b4c2d9;
+    --st-muted: #8b9cb8;
+    --st-dropdown-bg: #1a2438;
+    --st-dropdown-border: #4b5e78;
+    --st-dropdown-hover: #243047;
+    --st-dropdown-text: #f8fafc;
+    --st-btn-primary-bg: #0d9488;
+    --st-btn-primary-text: #f0fdfa;
+    --st-btn-secondary-bg: #1e293b;
     --st-btn-secondary-text: #f1f5f9;
-    --st-btn-secondary-border: #5b6c82;
-    --st-focus-ring: rgba(45,212,191,0.45);
+    --st-btn-secondary-border: #4b5e78;
+    --st-focus-ring: rgba(45,212,191,0.5);
+    --st-chat-user-bg: rgba(45,212,191,0.12);
+    --st-chat-assistant-bg: #141c2f;
+    --st-tab-inactive: #b4c2d9;
+    --st-tab-active: #f8fafc;
+    --st-tab-hover-bg: rgba(45,212,191,0.12);
 """
 
 
-def _dark_mode_streamlit_overrides() -> str:
+def _streamlit_widget_overrides() -> str:
     """
-    Dark-mode-only rules for Streamlit + Base Web.
+    Streamlit + Base Web styling for both themes.
 
-    Uses :root semantic tokens (--st-*) so contrast can be tuned in one place.
+    Uses :root semantic tokens so contrast is tuned in ``_LIGHT_VARS`` / ``_DARK_VARS`` only.
     Includes global [data-baseweb="popover"] rules because dropdown menus are often
     portaled outside the sidebar DOM.
     """
@@ -311,9 +357,15 @@ div[data-baseweb="popover"] [role="option"] span {
     border-color: var(--accent-light) !important;
 }
 [data-testid="stSidebar"] button:disabled,
-[data-testid="stMain"] button:disabled {
-    opacity: 0.45 !important;
+[data-testid="stMain"] button:disabled,
+[data-testid="stSidebar"] .stButton > button:disabled,
+[data-testid="stMain"] .stButton > button:disabled {
+    opacity: 1 !important;
+    filter: none !important;
     cursor: not-allowed !important;
+    background-color: var(--st-surface-elevated) !important;
+    color: var(--st-muted) !important;
+    border-color: var(--st-input-border) !important;
 }
 
 /* ----- Chat composer ----- */
@@ -343,6 +395,29 @@ section[data-testid="stBottom"],
     opacity: 1 !important;
 }
 
+/* ----- Chat transcript (markdown inside bubbles) ----- */
+[data-testid="stChatMessage"] {
+    color: var(--text-primary) !important;
+    border-color: var(--border-primary) !important;
+    background-color: var(--bg-card) !important;
+}
+[data-testid="stChatMessage"] .stMarkdown,
+[data-testid="stChatMessage"] .stMarkdownContainer,
+[data-testid="stChatMessage"] .stMarkdown p,
+[data-testid="stChatMessage"] .stMarkdown li,
+[data-testid="stChatMessage"] .stMarkdown strong {
+    color: var(--text-primary) !important;
+}
+[data-testid="stChatMessage"] a {
+    color: var(--accent-light) !important;
+}
+[data-testid="stChatMessage"] code,
+[data-testid="stChatMessage"] pre {
+    background: var(--surface-alt) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-primary) !important;
+}
+
 /* ----- Metrics (evaluation dashboard) ----- */
 [data-testid="stMain"] [data-testid="stMetric"] {
     background: var(--st-surface) !important;
@@ -352,18 +427,6 @@ section[data-testid="stBottom"],
     color: var(--st-caption) !important;
 }
 [data-testid="stMain"] [data-testid="stMetric"] [data-testid="stMetricValue"] {
-    color: var(--st-input-text) !important;
-}
-
-/* ----- Tabs (if used) ----- */
-.stTabs [data-baseweb="tab-list"] {
-    background: var(--st-surface) !important;
-    border: 1px solid var(--st-input-border) !important;
-}
-.stTabs [data-baseweb="tab"] {
-    color: var(--st-caption) !important;
-}
-.stTabs [aria-selected="true"] {
     color: var(--st-input-text) !important;
 }
 
@@ -388,7 +451,7 @@ section[data-testid="stBottom"],
 
 def _build_app_css(dark: bool = False) -> str:
     vars_block = _DARK_VARS if dark else _LIGHT_VARS
-    dark_extra = _dark_mode_streamlit_overrides() if dark else ""
+    streamlit_layer = _streamlit_widget_overrides()
     return f"""<style>
 :root {{
     --radius-sm: 8px;
@@ -703,19 +766,31 @@ h1, h2, h3, h4 {{ color: var(--text-primary) !important; }}
     border-radius: var(--radius-md);
     padding: 0.75rem;
 }}
-.stTabs [data-baseweb="tab-list"] {{
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
-    padding: 0.3rem;
-}}
 /* Workspace nav uses buttons; extra spacing handled in layout */
 [data-testid="stChatMessage"] {{
     border: 1px solid var(--border-primary);
     background: var(--bg-card) !important;
     border-radius: var(--radius-md);
 }}
-{dark_extra}
+.stTabs [data-baseweb="tab-list"] {{
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-primary) !important;
+    border-radius: var(--radius-lg);
+    padding: 0.3rem !important;
+}}
+.stTabs [data-baseweb="tab"] {{
+    color: var(--st-tab-inactive) !important;
+}}
+.stTabs [data-baseweb="tab"]:hover {{
+    background-color: var(--st-tab-hover-bg) !important;
+    border-radius: var(--radius-sm);
+}}
+.stTabs [data-baseweb="tab"][aria-selected="true"],
+.stTabs [data-baseweb="tab"][aria-selected="true"] span {{
+    color: var(--st-tab-active) !important;
+    font-weight: 600 !important;
+}}
+{streamlit_layer}
 </style>"""
 
 
@@ -804,6 +879,9 @@ def render_configuration_pill_bar(*, settings: UISettings) -> str:
         _pill(f"Prompt · {label_for_prompt_strategy(settings.prompt_strategy)}"),
         _pill(diff_note),
         _pill(settings.model_preset),
+        _pill(f"Temperature · {settings.temperature:.2f}"),
+        _pill(f"Top P · {settings.top_p:.2f}"),
+        _pill(f"Max Tokens · {settings.max_tokens}"),
         "</div>",
         "</div>",
     ]

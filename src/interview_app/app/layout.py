@@ -70,6 +70,10 @@ from interview_app.ui.widgets import (
 )
 from interview_app.utils.errors import safe_user_message
 from interview_app.utils.language import DEFAULT_LANGUAGE, detect_language
+from interview_app.utils.mock_interview_export import (
+    build_mock_interview_export_payload,
+    mock_interview_export_filename,
+)
 
 
 def render_hero_header() -> None:
@@ -165,7 +169,7 @@ def _render_session_row_compact(settings: UISettings) -> None:
     session_id = st.session_state.get("current_session_id")
     status = "Saved" if session_id else ("In progress" if messages else "New session")
 
-    c0, c1, c2, c3 = st.columns([2, 2, 1, 1])
+    c0, c1, c2, c3, c4 = st.columns([2, 2, 1, 1, 1])
     with c0:
         st.caption(f"**Session** · {status}")
     with c1:
@@ -185,7 +189,7 @@ def _render_session_row_compact(settings: UISettings) -> None:
                     session_id,
                     title=session_title or "Untitled session",
                 )
-                msgs = [{"role": m.role, "content": m.content} for m in messages]
+                msgs = [m.model_dump(exclude_none=True) for m in messages]
                 sid = save_session(
                     session_id,
                     meta,
@@ -202,6 +206,22 @@ def _render_session_row_compact(settings: UISettings) -> None:
             st.session_state.current_session_id = None
             st.session_state.session_meta = None
             st.rerun()
+    with c4:
+        export_payload = build_mock_interview_export_payload(
+            settings=settings,
+            messages=messages,
+            session_title=str(st.session_state.get("session_title") or ""),
+        )
+        st.download_button(
+            label="Export JSON",
+            data=json.dumps(export_payload, indent=2, ensure_ascii=False),
+            file_name=mock_interview_export_filename(
+                str(st.session_state.get("session_title") or "")
+            ),
+            mime="application/json",
+            key="mock_interview_export_download",
+            help="Download this mock interview as structured JSON (metadata + messages).",
+        )
 
 
 def _render_mock_interview_tab(settings: UISettings) -> None:

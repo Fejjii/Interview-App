@@ -34,6 +34,8 @@ class ChatMessage(BaseModel):
 
     role: str = Field(..., description="'user' or 'assistant'")
     content: str = Field(default="")
+    # ISO-8601 UTC with Z suffix (set on append; optional for legacy saved sessions)
+    timestamp: str | None = Field(default=None)
 
 
 class EvaluationResult(BaseModel):
