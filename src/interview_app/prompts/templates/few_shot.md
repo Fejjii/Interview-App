@@ -1,6 +1,7 @@
 <!--
 name: few_shot
 description: Domain- and focus-aligned exemplar questions, then a separate generation task.
+Insert {seniority_calibration_block}: ties exemplar *style* to candidate band (Junior vs Senior).
 -->
 
 ## Exemplars (few-shot — pattern only)
@@ -25,6 +26,8 @@ Requirements:
 **Interview focus:** {interview_focus}
 **Question difficulty:** {difficulty}
 **Interviewer persona:** {persona}
+
+{seniority_calibration_block}
 
 {diversity_and_quality_block}
 

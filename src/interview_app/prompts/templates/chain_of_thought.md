@@ -1,6 +1,7 @@
 <!--
 name: chain_of_thought
 description: User scenario for senior, situational questions; private reasoning protocol is only in the system prompt.
+Insert {seniority_calibration_block}: CoT user task must match Junior vs Senior depth.
 -->
 
 Follow the **chain-of-thought protocol in the system message** privately. Your visible answer must be **only** the questions—no analysis, headings, or “reasoning:” sections.
@@ -14,6 +15,8 @@ This mode targets **deeper, situational prompts** than baseline generation: trad
 **Interview focus:** {interview_focus}
 **Question difficulty:** {difficulty}
 **Interviewer persona:** {persona}
+
+{seniority_calibration_block}
 
 {diversity_and_quality_block}
 

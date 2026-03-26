@@ -1,6 +1,7 @@
 <!--
 name: structured_output
 description: JSON schema for questions with skill, difficulty, and rationale fields.
+Insert {seniority_calibration_block}: JSON questions must respect Junior vs Senior depth.
 -->
 
 Return **one JSON object** that matches this schema **exactly** (keys and nesting as shown). Fill the array with **{n_questions}** objects.
@@ -15,6 +16,8 @@ Return **one JSON object** that matches this schema **exactly** (keys and nestin
     }}
   ]
 }}
+
+{seniority_calibration_block}
 
 **Field rules:**
 - `question`: the full interview prompt as asked by an interviewer.

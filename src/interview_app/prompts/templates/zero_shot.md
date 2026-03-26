@@ -1,6 +1,7 @@
 <!--
 name: zero_shot
 description: Direct baseline interview questions—no examples, no reasoning scaffold in the reply.
+Insert {seniority_calibration_block}: explicit Junior vs Senior depth (see question_prompt_helpers).
 -->
 
 You are preparing for an interview. Generate **standard, direct** questions only—no worked examples in your reply and no “first I will think step-by-step” text.
@@ -12,6 +13,8 @@ You are preparing for an interview. Generate **standard, direct** questions only
 **Interview focus:** {interview_focus}
 **Question difficulty:** {difficulty}
 **Interviewer persona (tone hint only):** {persona}
+
+{seniority_calibration_block}
 
 {diversity_and_quality_block}
 

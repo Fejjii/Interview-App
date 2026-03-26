@@ -24,6 +24,7 @@ from interview_app.prompts.question_prompt_helpers import (
     diversity_block_few_shot,
     diversity_block_zero_shot,
     seniority_band,
+    seniority_calibration_for_questions,
 )
 from interview_app.utils.language import language_instruction
 
@@ -80,6 +81,9 @@ def build_zero_shot_prompt(
     """Build a direct, instruction-only (zero-shot) prompt."""
     template = load_template_text("zero_shot")
     diversity = diversity_block_zero_shot(n_questions=n_questions, seniority=seniority)
+    seniority_calibration_block = seniority_calibration_for_questions(
+        seniority=seniority, role_category=role_category
+    )
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -91,6 +95,7 @@ def build_zero_shot_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        seniority_calibration_block=seniority_calibration_block,
         diversity_and_quality_block=diversity,
     )
     system_prompt = _system_prompt_for(
@@ -98,6 +103,7 @@ def build_zero_shot_prompt(
         response_language=response_language,
         persona=persona,
         include_persona=False,
+        seniority=seniority,
     )
     trace = PromptStrategyDebugTrace(
         strategy_key="zero_shot",
@@ -144,6 +150,9 @@ def build_few_shot_prompt(
         interview_focus=interview_focus,
     )
     diversity = diversity_block_few_shot(n_questions=n_questions, seniority=seniority)
+    seniority_calibration_block = seniority_calibration_for_questions(
+        seniority=seniority, role_category=role_category
+    )
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -156,10 +165,11 @@ def build_few_shot_prompt(
         difficulty=difficulty,
         persona=persona,
         few_shot_demonstrations=few_shot_demonstrations,
+        seniority_calibration_block=seniority_calibration_block,
         diversity_and_quality_block=diversity,
     )
     system_prompt = _system_prompt_for(
-        "few_shot", response_language=response_language, persona=persona
+        "few_shot", response_language=response_language, persona=persona, seniority=seniority
     )
     trace = PromptStrategyDebugTrace(
         strategy_key="few_shot",
@@ -196,6 +206,9 @@ def build_chain_of_thought_prompt(
     """
     template = load_template_text("chain_of_thought")
     diversity = diversity_block_chain_of_thought(n_questions=n_questions, seniority=seniority)
+    seniority_calibration_block = seniority_calibration_for_questions(
+        seniority=seniority, role_category=role_category
+    )
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -207,10 +220,11 @@ def build_chain_of_thought_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        seniority_calibration_block=seniority_calibration_block,
         diversity_and_quality_block=diversity,
     )
     system_prompt = _system_prompt_for(
-        "chain_of_thought", response_language=response_language, persona=persona
+        "chain_of_thought", response_language=response_language, persona=persona, seniority=seniority
     )
     trace = PromptStrategyDebugTrace(
         strategy_key="chain_of_thought",
@@ -245,6 +259,9 @@ def build_structured_output_prompt(
 ) -> PromptBuildResult:
     """Build a prompt that asks for machine-readable output (JSON)."""
     template = load_template_text("structured_output")
+    seniority_calibration_block = seniority_calibration_for_questions(
+        seniority=seniority, role_category=role_category
+    )
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -256,9 +273,10 @@ def build_structured_output_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        seniority_calibration_block=seniority_calibration_block,
     )
     system_prompt = _system_prompt_for(
-        "structured_output", response_language=response_language, persona=persona
+        "structured_output", response_language=response_language, persona=persona, seniority=seniority
     )
     trace = PromptStrategyDebugTrace(
         strategy_key="structured_output",
@@ -301,6 +319,9 @@ def build_role_based_prompt(
         interview_focus=interview_focus,
     )
     persona_behavior = get_persona_prompt(persona)
+    seniority_calibration_block = seniority_calibration_for_questions(
+        seniority=seniority, role_category=role_category
+    )
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -314,9 +335,10 @@ def build_role_based_prompt(
         persona=persona,
         persona_identity=persona_identity,
         persona_behavior=persona_behavior,
+        seniority_calibration_block=seniority_calibration_block,
     )
     system_prompt = _system_prompt_for(
-        "role_based", response_language=response_language, persona=persona
+        "role_based", response_language=response_language, persona=persona, seniority=seniority
     )
     trace = PromptStrategyDebugTrace(
         strategy_key="role_based",
@@ -356,6 +378,7 @@ def _system_prompt_for(
     response_language: str = "en",
     persona: str = "Hiring Manager",
     include_persona: bool = True,
+    seniority: str = "",
 ) -> str:
     """
     Return a distinct system prompt per technique.
@@ -391,18 +414,20 @@ def _system_prompt_for(
             base = zero_base
             tech = (
                 "Technique: **Zero-shot**. The user message has **no** worked examples. Reply with **only** the "
-                "numbered questions—no commentary, no plan, no “let me think aloud”."
+                "numbered questions—no commentary, no plan, no “let me think aloud”. Honor **Seniority calibration** "
+                "in the user message strictly."
             )
         case "few_shot":
             base = few_base
             tech = (
                 "Technique: **Few-shot**. Internalize the exemplars’ **structure** (scenario richness, interviewer "
-                "cadence). Generate **original** questions; superficially rewording an exemplar is not acceptable."
+                "cadence). Generate **original** questions; superficially rewording an exemplar is not acceptable. "
+                "Final difficulty must match **Seniority calibration**, not copy exemplar band by default."
             )
         case "chain_of_thought":
             base = cot_base
             tech = (
-                f"{cot_reasoning_scaffold_system_text()}\n\n"
+                f"{cot_reasoning_scaffold_system_text(seniority)}\n\n"
                 "Technique: **Chain-of-thought (internal only)**. Complete the private checklist above, then output "
                 "**only** the final numbered questions. Visible output must not contain reasoning fragments."
             )
