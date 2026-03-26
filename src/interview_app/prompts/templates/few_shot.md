@@ -1,17 +1,22 @@
 <!--
 name: few_shot
-description: Few-shot: demonstrations keyed to interview focus, then a fresh generation task.
+description: Domain- and focus-aligned exemplar questions, then a separate generation task.
 -->
 
-## Demonstrations (few-shot pattern)
+## Exemplars (few-shot — pattern only)
 
 {few_shot_demonstrations}
 
 ---
 
-## Your task (new questions — do not copy the demonstrations)
+## Your task (new questions)
 
-Generate **{n_questions}** **new** interview questions for this target scenario. Match the **focus**, **depth**, and **realism** of the demonstrations above, but write original wording appropriate to the details below.
+You are simulating a **strong hiring conversation**. After the exemplars above, write **{n_questions}** **new** questions for the candidate below.
+
+Requirements:
+- Match exemplar **realism**: concrete situations, stakes, and interviewer-like wording.
+- Stay aligned with **role title**, **focus**, **round**, **seniority**, and the job description.
+- **Do not** copy or trivially paraphrase the exemplars; invent **fresh** scenarios.
 
 **Role category:** {role_category}
 **Target role title:** {role_title}
@@ -21,8 +26,10 @@ Generate **{n_questions}** **new** interview questions for this target scenario.
 **Question difficulty:** {difficulty}
 **Interviewer persona:** {persona}
 
+{diversity_and_quality_block}
+
 Job description (optional):
 {job_description}
 
 Output format:
-- Numbered list **only** (1., 2., …).
+- Numbered list **only** (`1.`, `2.`, …).

@@ -8,6 +8,7 @@ Goal:
 - sanity-check that the structured-output strategy actually asks for JSON
 """
 
+from interview_app.prompts.prompt_templates import load_template_text
 from interview_app.prompts.prompt_strategies import (
     build_chain_of_thought_prompt,
     build_few_shot_prompt,
@@ -15,6 +16,13 @@ from interview_app.prompts.prompt_strategies import (
     build_structured_output_prompt,
     build_zero_shot_prompt,
 )
+
+
+def test_template_text_strips_file_comment_header() -> None:
+    """Model-facing template text must not include the `<!-- -->` file preamble."""
+    txt = load_template_text("zero_shot")
+    assert not txt.lstrip().startswith("<!--")
+    assert "name: zero_shot" not in txt
 
 
 def test_prompt_strategies_return_non_empty_prompts() -> None:
@@ -83,9 +91,10 @@ def test_few_shot_injects_focus_aligned_demonstrations() -> None:
         interview_focus="System Design / Architecture",
         n_questions=2,
     )
-    assert "Demonstration scenario" in res.user_prompt
-    assert "Example questions" in res.user_prompt
-    assert "event-driven" in res.user_prompt.lower()
+    assert "Demonstration context" in res.user_prompt
+    assert "Example interview questions" in res.user_prompt
+    up = res.user_prompt.lower()
+    assert "warehouse" in up or "ingestion" in up or "near-real-time" in up or "streaming" in up
 
 
 def test_role_based_includes_identity_and_behavior() -> None:
@@ -113,4 +122,5 @@ def test_chain_of_thought_system_lists_internal_steps() -> None:
         n_questions=3,
     )
     assert "chain-of-thought" in res.system_prompt.lower()
-    assert "competencies" in res.system_prompt.lower()
+    assert "weak" in res.system_prompt.lower() and "strong" in res.system_prompt.lower()
+    assert res.debug_trace is not None and res.debug_trace.cot_reasoning_scaffold_injected is True

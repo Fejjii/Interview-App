@@ -203,6 +203,7 @@ def generate_questions(
             system_prompt=system_prompt,
             user_prompt=user_prompt_body,
             template_name=prompt.template_name,
+            debug_trace=prompt.debug_trace,
         ),
     )
 

@@ -10,11 +10,48 @@ Consumed exclusively by ``services/interview_generator`` and unit tests.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from interview_app.prompts.few_shot_examples import build_few_shot_demonstration_block
+from interview_app.prompts.few_shot_examples import (
+    build_few_shot_demonstration_block,
+    few_shot_trace_for_debug,
+)
 from interview_app.prompts.personas import get_persona_prompt
 from interview_app.prompts.prompt_templates import load_template_text
+from interview_app.prompts.question_prompt_helpers import (
+    cot_reasoning_scaffold_system_text,
+    diversity_block_chain_of_thought,
+    diversity_block_few_shot,
+    diversity_block_zero_shot,
+    seniority_band,
+)
 from interview_app.utils.language import language_instruction
+
+
+@dataclass(frozen=True)
+class PromptStrategyDebugTrace:
+    """Opt-in diagnostics: which strategy path and exemplars were used (no secrets)."""
+
+    strategy_key: str
+    template_name: str
+    seniority_band: str
+    few_shot_domain: str | None
+    few_shot_focus_resolved: str | None
+    few_shot_example_count: int | None
+    cot_reasoning_scaffold_injected: bool
+    diversity_block_kind: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "strategy_key": self.strategy_key,
+            "template_name": self.template_name,
+            "seniority_band": self.seniority_band,
+            "few_shot_domain": self.few_shot_domain,
+            "few_shot_focus_resolved": self.few_shot_focus_resolved,
+            "few_shot_example_count": self.few_shot_example_count,
+            "cot_reasoning_scaffold_injected": self.cot_reasoning_scaffold_injected,
+            "diversity_block_kind": self.diversity_block_kind,
+        }
 
 
 @dataclass(frozen=True)
@@ -24,6 +61,7 @@ class PromptBuildResult:
     system_prompt: str
     user_prompt: str
     template_name: str
+    debug_trace: PromptStrategyDebugTrace | None = None
 
 
 def build_zero_shot_prompt(
@@ -41,6 +79,7 @@ def build_zero_shot_prompt(
 ) -> PromptBuildResult:
     """Build a direct, instruction-only (zero-shot) prompt."""
     template = load_template_text("zero_shot")
+    diversity = diversity_block_zero_shot(n_questions=n_questions, seniority=seniority)
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -52,6 +91,7 @@ def build_zero_shot_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        diversity_and_quality_block=diversity,
     )
     system_prompt = _system_prompt_for(
         "zero_shot",
@@ -59,8 +99,18 @@ def build_zero_shot_prompt(
         persona=persona,
         include_persona=False,
     )
+    trace = PromptStrategyDebugTrace(
+        strategy_key="zero_shot",
+        template_name="zero_shot",
+        seniority_band=seniority_band(seniority),
+        few_shot_domain=None,
+        few_shot_focus_resolved=None,
+        few_shot_example_count=None,
+        cot_reasoning_scaffold_injected=False,
+        diversity_block_kind="zero_shot",
+    )
     return PromptBuildResult(
-        system_prompt=system_prompt, user_prompt=user_prompt, template_name="zero_shot"
+        system_prompt=system_prompt, user_prompt=user_prompt, template_name="zero_shot", debug_trace=trace
     )
 
 
@@ -86,6 +136,14 @@ def build_few_shot_prompt(
         interview_round=interview_round,
         interview_focus=interview_focus,
     )
+    fs_meta = few_shot_trace_for_debug(
+        role_category=role_category,
+        role_title=role_title,
+        seniority=seniority,
+        interview_round=interview_round,
+        interview_focus=interview_focus,
+    )
+    diversity = diversity_block_few_shot(n_questions=n_questions, seniority=seniority)
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -98,12 +156,23 @@ def build_few_shot_prompt(
         difficulty=difficulty,
         persona=persona,
         few_shot_demonstrations=few_shot_demonstrations,
+        diversity_and_quality_block=diversity,
     )
     system_prompt = _system_prompt_for(
         "few_shot", response_language=response_language, persona=persona
     )
+    trace = PromptStrategyDebugTrace(
+        strategy_key="few_shot",
+        template_name="few_shot",
+        seniority_band=seniority_band(seniority),
+        few_shot_domain=str(fs_meta["few_shot_domain"]),
+        few_shot_focus_resolved=str(fs_meta["few_shot_focus_resolved"]),
+        few_shot_example_count=int(fs_meta["few_shot_example_count"]),
+        cot_reasoning_scaffold_injected=False,
+        diversity_block_kind="few_shot",
+    )
     return PromptBuildResult(
-        system_prompt=system_prompt, user_prompt=user_prompt, template_name="few_shot"
+        system_prompt=system_prompt, user_prompt=user_prompt, template_name="few_shot", debug_trace=trace
     )
 
 
@@ -126,6 +195,7 @@ def build_chain_of_thought_prompt(
     Note: The system prompt explicitly instructs the model not to reveal hidden reasoning.
     """
     template = load_template_text("chain_of_thought")
+    diversity = diversity_block_chain_of_thought(n_questions=n_questions, seniority=seniority)
     user_prompt = _format_template(
         template,
         role_category=role_category,
@@ -137,14 +207,26 @@ def build_chain_of_thought_prompt(
         n_questions=n_questions,
         difficulty=difficulty,
         persona=persona,
+        diversity_and_quality_block=diversity,
     )
     system_prompt = _system_prompt_for(
         "chain_of_thought", response_language=response_language, persona=persona
+    )
+    trace = PromptStrategyDebugTrace(
+        strategy_key="chain_of_thought",
+        template_name="chain_of_thought",
+        seniority_band=seniority_band(seniority),
+        few_shot_domain=None,
+        few_shot_focus_resolved=None,
+        few_shot_example_count=None,
+        cot_reasoning_scaffold_injected=True,
+        diversity_block_kind="chain_of_thought",
     )
     return PromptBuildResult(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         template_name="chain_of_thought",
+        debug_trace=trace,
     )
 
 
@@ -178,10 +260,21 @@ def build_structured_output_prompt(
     system_prompt = _system_prompt_for(
         "structured_output", response_language=response_language, persona=persona
     )
+    trace = PromptStrategyDebugTrace(
+        strategy_key="structured_output",
+        template_name="structured_output",
+        seniority_band=seniority_band(seniority),
+        few_shot_domain=None,
+        few_shot_focus_resolved=None,
+        few_shot_example_count=None,
+        cot_reasoning_scaffold_injected=False,
+        diversity_block_kind="n/a_structured",
+    )
     return PromptBuildResult(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         template_name="structured_output",
+        debug_trace=trace,
     )
 
 
@@ -225,8 +318,18 @@ def build_role_based_prompt(
     system_prompt = _system_prompt_for(
         "role_based", response_language=response_language, persona=persona
     )
+    trace = PromptStrategyDebugTrace(
+        strategy_key="role_based",
+        template_name="role_based",
+        seniority_band=seniority_band(seniority),
+        few_shot_domain=None,
+        few_shot_focus_resolved=None,
+        few_shot_example_count=None,
+        cot_reasoning_scaffold_injected=False,
+        diversity_block_kind="n/a_role_based",
+    )
     return PromptBuildResult(
-        system_prompt=system_prompt, user_prompt=user_prompt, template_name="role_based"
+        system_prompt=system_prompt, user_prompt=user_prompt, template_name="role_based", debug_trace=trace
     )
 
 
@@ -259,43 +362,64 @@ def _system_prompt_for(
     Appends persona tone (except zero-shot) and language instruction.
     """
 
-    base = (
+    legacy_base = (
         "You are an AI interview assistant helping a candidate prepare for a realistic hiring "
         "conversation. Follow instructions precisely, stay role-relevant, and avoid inventing "
         "employer-specific facts that were not provided."
     )
 
+    zero_base = (
+        "You are a **technical interview coach** emulating a concise hiring interviewer. "
+        "Produce only what the user asks for: clear, standard interview questions grounded in "
+        "the supplied role, seniority, and focus—no hidden reasoning and no fabricated employer facts."
+    )
+
+    few_base = (
+        "You are a **technical interviewer**. The user message contains **exemplar questions**—treat them as "
+        "benchmarks for **realism, specificity, and interviewer voice**. Your job is to write **new** questions "
+        "that could plausibly follow in the same interview, not to echo the exemplars."
+    )
+
+    cot_base = (
+        "You are a **senior technical interviewer** who asks discriminating, production-aware questions. "
+        "You prioritize scenarios that reveal prioritization, trade-offs, reliability, and judgment—not "
+        "textbook recitation."
+    )
+
     match strategy:
         case "zero_shot":
+            base = zero_base
             tech = (
-                "Technique: Zero-shot. Direct instructions only in the user message—no separate "
-                "worked examples, no chain-of-thought in the reply. Output only the requested questions."
+                "Technique: **Zero-shot**. The user message has **no** worked examples. Reply with **only** the "
+                "numbered questions—no commentary, no plan, no “let me think aloud”."
             )
         case "few_shot":
+            base = few_base
             tech = (
-                "Technique: Few-shot. Treat the provided demonstrations as pattern, depth, and tone "
-                "guides. Generate **new** questions in the same style; do not copy or lightly paraphrase them."
+                "Technique: **Few-shot**. Internalize the exemplars’ **structure** (scenario richness, interviewer "
+                "cadence). Generate **original** questions; superficially rewording an exemplar is not acceptable."
             )
         case "chain_of_thought":
+            base = cot_base
             tech = (
-                "Technique: Chain-of-thought (internal only). Before writing anything visible, privately "
-                "work through—in order—(1) role priorities implied by the role title, seniority, and job "
-                "description, (2) key competencies to test for the stated interview focus and round, "
-                "(3) appropriate depth for seniority and round, (4) a brief plan for the requested number "
-                "of questions. Then output **only** a numbered list of interview questions. Do not output "
-                "steps, labels, analysis, or chain-of-thought text."
+                f"{cot_reasoning_scaffold_system_text()}\n\n"
+                "Technique: **Chain-of-thought (internal only)**. Complete the private checklist above, then output "
+                "**only** the final numbered questions. Visible output must not contain reasoning fragments."
             )
         case "structured_output":
+            base = legacy_base
             tech = (
                 "Technique: Structured output. Return **valid JSON only**, exactly matching the schema "
                 "in the user message. No markdown fences, no prose before or after the JSON."
             )
         case "role_based":
+            base = legacy_base
             tech = (
                 "Technique: Role-based prompting. The user message defines a concrete interviewer "
                 "identity and behavior—honor it consistently in every line you output."
             )
         case _:
+            base = legacy_base
             tech = ""
 
     prompt = f"{base}\n\n{tech}" if tech else base

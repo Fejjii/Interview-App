@@ -344,9 +344,15 @@ def _maybe_run_pending_generation(settings: UISettings) -> None:
     )
     st.toast("Questions generated.")
     if settings.show_debug and gen_result.prompt is not None:
+        _tr = (
+            gen_result.prompt.debug_trace.as_dict()
+            if gen_result.prompt.debug_trace is not None
+            else None
+        )
         show_prompt_debug(
             system_prompt=gen_result.prompt.system_prompt,
             user_prompt=gen_result.prompt.user_prompt,
+            strategy_trace=_tr,
         )
 
 
@@ -486,6 +492,13 @@ def _render_question_generation_tab(settings: UISettings) -> None:
                             elif not gen_b.ok:
                                 err_b = gen_b.error or err_b or "Generation failed."
 
+                        trace_a: dict[str, object] | None = None
+                        trace_b: dict[str, object] | None = None
+                        if gen_a is not None and gen_a.prompt and gen_a.prompt.debug_trace is not None:
+                            trace_a = gen_a.prompt.debug_trace.as_dict()
+                        if gen_b is not None and gen_b.prompt and gen_b.prompt.debug_trace is not None:
+                            trace_b = gen_b.prompt.debug_trace.as_dict()
+
                         st.session_state.ia_compare_pair = {
                             "a_key": ka,
                             "b_key": kb,
@@ -497,6 +510,8 @@ def _render_question_generation_tab(settings: UISettings) -> None:
                             "ok_b": ok_b,
                             "err_a": err_a,
                             "err_b": err_b,
+                            "trace_a": trace_a,
+                            "trace_b": trace_b,
                         }
 
     pair = st.session_state.get("ia_compare_pair")
@@ -525,12 +540,19 @@ def _render_question_generation_tab(settings: UISettings) -> None:
 
     if settings.show_debug:
         nq = int(st.session_state.get("ia_n_questions", 5))
+        _pair_dbg = st.session_state.get("ia_compare_pair")
+        _extra: dict[str, object] = {
+            "n_questions": nq,
+            "job_description_len": len(settings.job_description or ""),
+        }
+        if isinstance(_pair_dbg, dict) and (_pair_dbg.get("trace_a") or _pair_dbg.get("trace_b")):
+            _extra["strategy_comparison_traces"] = {
+                "a": _pair_dbg.get("trace_a"),
+                "b": _pair_dbg.get("trace_b"),
+            }
         show_settings_debug(
             settings=settings,
-            extra={
-                "n_questions": nq,
-                "job_description_len": len(settings.job_description or ""),
-            },
+            extra=_extra,
         )
 
 

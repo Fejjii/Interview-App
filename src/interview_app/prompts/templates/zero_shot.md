@@ -1,9 +1,9 @@
 <!--
 name: zero_shot
-description: Direct instruction only—no examples, no explicit reasoning protocol in the reply.
+description: Direct baseline interview questions—no examples, no reasoning scaffold in the reply.
 -->
 
-Generate interview preparation questions using **only** the scenario below. Do not include examples of your own, do not outline a reasoning plan, and do not add commentary—only the questions.
+You are preparing for an interview. Generate **standard, direct** questions only—no worked examples in your reply and no “first I will think step-by-step” text.
 
 **Role category:** {role_category}
 **Target role title:** {role_title}
@@ -11,12 +11,15 @@ Generate interview preparation questions using **only** the scenario below. Do n
 **Interview round:** {interview_round}
 **Interview focus:** {interview_focus}
 **Question difficulty:** {difficulty}
-**Interviewer persona (context for tone):** {persona}
+**Interviewer persona (tone hint only):** {persona}
 
-Produce **{n_questions}** distinct interview questions tailored to this setup.
+{diversity_and_quality_block}
 
-Job description (optional; use only what is provided—do not invent employer details):
+Job description (optional; ground in this text when helpful—do not invent employer-specific facts):
 {job_description}
 
+Produce exactly **{n_questions}** interview questions.
+
 Output format:
-- Numbered list **only** (1., 2., …). One question per item.
+- Numbered list **only** (`1.`, `2.`, …). One primary question per item.
+- **Classic interview phrasing** (clear ask, moderate depth). Avoid elaborate multi-paragraph case studies.

@@ -395,9 +395,17 @@ def show_guardrail_summary(*, guardrails: dict[str, GuardrailResult]) -> None:
             st.code(res.model_dump_json(indent=2), language="json")
 
 
-def show_prompt_debug(*, system_prompt: str, user_prompt: str) -> None:
+def show_prompt_debug(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    strategy_trace: dict[str, Any] | None = None,
+) -> None:
     """Show the exact effective prompts sent to the model (opt-in sidebar debug)."""
     with st.expander("Effective prompts (debug)", expanded=False):
+        if strategy_trace:
+            st.markdown("**Strategy build trace (debug)**")
+            st.code(json.dumps(strategy_trace, indent=2), language="json")
         st.markdown("**Effective system prompt**")
         st.code(system_prompt, language="markdown")
         st.markdown("**Effective user prompt**")

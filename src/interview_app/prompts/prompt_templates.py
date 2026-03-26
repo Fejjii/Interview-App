@@ -31,20 +31,38 @@ def list_templates() -> list[str]:
     return sorted(p.stem for p in _TEMPLATES_DIR.glob("*.md") if p.is_file())
 
 
+def _read_raw_template_file(name: str) -> str:
+    """Read template file bytes as UTF-8 text; validates ``name``."""
+    normalized = name.strip().replace("\\", "/")
+    if "/" in normalized or normalized in {"", ".", ".."}:
+        raise ValueError("Template name must be a simple file stem (no paths).")
+    path = _TEMPLATES_DIR / f"{normalized}.md"
+    return path.read_text(encoding="utf-8")
+
+
 def load_template_text(name: str) -> str:
     """
     Load a template by name (without extension) from `templates/`.
+
+    Leading ``<!-- ... -->`` metadata blocks are stripped so model-facing
+    prompts do not include file headers.
 
     Raises:
         FileNotFoundError: if the template does not exist.
         ValueError: if name looks like a path traversal.
     """
-    normalized = name.strip().replace("\\", "/")
-    if "/" in normalized or normalized in {"", ".", ".."}:
-        raise ValueError("Template name must be a simple file stem (no paths).")
+    return _strip_leading_template_comment(_read_raw_template_file(name))
 
-    path = _TEMPLATES_DIR / f"{normalized}.md"
-    return path.read_text(encoding="utf-8")
+
+def _strip_leading_template_comment(text: str) -> str:
+    """Remove optional `<!-- ... -->` header so model prompts do not include file metadata."""
+    t = text.lstrip()
+    if not t.startswith("<!--"):
+        return text
+    end = t.find("-->")
+    if end == -1:
+        return text
+    return t[end + 3 :].lstrip()
 
 
 def load_template(name: str) -> PromptTemplate:
@@ -57,8 +75,9 @@ def load_template(name: str) -> PromptTemplate:
         description: ...
         -->
     """
-    text = load_template_text(name)
-    description = _extract_description(text)
+    raw = _read_raw_template_file(name)
+    description = _extract_description(raw)
+    text = _strip_leading_template_comment(raw)
     return PromptTemplate(name=name, text=text, description=description)
 
 
